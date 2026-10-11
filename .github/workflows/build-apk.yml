@@ -1,0 +1,83 @@
+name: Build Android APK (Khamin)
+
+# Builds an installable APK in the cloud (no Flutter needed on your computer).
+# Run it from the repo page: Actions > Build Android APK (Khamin) > Run workflow.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Analyze (does not block the build)
+        shell: bash
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.log 2>&1 || true
+          errs=$( (grep -E "^\s*error" analyze.log || true) | head -40 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=analyze-errors::count=$( (grep -cE '^\s*error' analyze.log || true) ) ${errs}"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set +e
+          flutter build apk --release 2>&1 | tee build.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            msg=$( (grep -nE "rror|FAILURE|went wrong|Could not|not found|incompatible|Unsupported|e: |Execution failed" build.log || true) | head -45 | cut -c1-320 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=build-errors::${msg}"
+            tl=$(tail -30 build.log | cut -c1-320 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=build-tail::${tl}"
+            exit 1
+          fi
+
+      - name: Inspect APK (diagnostics)
+        shell: bash
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          out=$( {
+            ls -l "$APK"
+            unzip -tq "$APK" | tail -1
+            "$BT/apksigner" verify --verbose --print-certs "$APK" 2>&1 | head -12
+            "$BT/aapt" dump badging "$APK" 2>&1 | grep -E "^package|sdkVersion|targetSdk|native-code|ERROR" | head -8
+          } 2>&1 | cut -c1-250 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=apk-info::${out}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: khamin-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Publish APK as a release (direct download, no zip)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk khamin.apk
+          gh release create "build-${{ github.run_number }}" khamin.apk \
+            --title "Build ${{ github.run_number }}" --notes "APK build ${{ github.run_number }}" --latest
