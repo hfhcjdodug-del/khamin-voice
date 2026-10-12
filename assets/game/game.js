@@ -297,7 +297,7 @@ document.addEventListener('click', (e)=>{
 });
 
 // ---------- شاشة الافتتاح ----------
-window.addEventListener('DOMContentLoaded', () => {
+(function(fn){ if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', fn); else fn(); })(() => {
   setTimeout(() => {
     document.getElementById('splash-screen').classList.add('hide');
     if (localStorage.getItem('entry_choice_made') === 'true'){
