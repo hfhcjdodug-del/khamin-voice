@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
@@ -66,21 +65,20 @@ class _SignInScreenState extends State<SignInScreen> {
           child: Column(children: [
             const Spacer(flex: 2),
             Container(
-              width: 110,
-              height: 110,
               decoration: BoxDecoration(
-                gradient: brandGradient,
                 borderRadius: BorderRadius.circular(34),
                 boxShadow: [
-                  BoxShadow(color: C.pink.withValues(alpha: 0.45), blurRadius: 40),
+                  BoxShadow(color: C.violet.withValues(alpha: 0.55), blurRadius: 44),
                 ],
               ),
-              child: const Icon(Icons.mic_rounded, size: 58, color: Colors.white),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(34),
+                child: Image.asset('assets/logo.png', width: 130, height: 130),
+              ),
             ),
             const SizedBox(height: 22),
-            Text('KHAMIN',
-                style: GoogleFonts.orbitron(
-                    fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: 6)),
+            const Text('نتونس',
+                style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
             const Text('تحدّث، تعرّف، واستمتع بغرف صوتية مباشرة',
                 textAlign: TextAlign.center,

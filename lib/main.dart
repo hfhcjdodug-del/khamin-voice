@@ -30,7 +30,7 @@ class KhaminApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = ThemeData.dark(useMaterial3: true);
     return MaterialApp(
-      title: 'خمّن',
+      title: 'نتونس',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar'),
       builder: (context, child) => Directionality(
