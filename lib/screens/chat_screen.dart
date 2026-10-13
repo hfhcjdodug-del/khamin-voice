@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../theme.dart';
+import 'challenge.dart';
 import 'profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -89,6 +90,14 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(widget.peerName, style: const TextStyle(fontWeight: FontWeight.w800)),
           ]),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'تحدّي / فيلم',
+            icon: const Icon(Icons.sports_esports_rounded, color: C.pink),
+            onPressed: () => showFriendActions(context,
+                peerId: widget.peerId, peerName: widget.peerName),
+          ),
+        ],
       ),
       body: Column(children: [
         Expanded(

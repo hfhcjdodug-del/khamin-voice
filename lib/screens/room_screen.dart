@@ -5,6 +5,7 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../main.dart';
+import '../audio.dart';
 import '../theme.dart';
 import 'profile_screen.dart';
 
@@ -63,6 +64,7 @@ class _RoomScreenState extends State<RoomScreen> {
   @override
   void initState() {
     super.initState();
+    Music.stop();
     _start();
   }
 

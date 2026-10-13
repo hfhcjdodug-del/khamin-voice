@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../audio.dart';
 import '../theme.dart';
 import 'guess_match_screen.dart';
 
 class GuessLobbyScreen extends StatefulWidget {
-  const GuessLobbyScreen({super.key});
+  final String? music;
+  const GuessLobbyScreen({super.key, this.music});
 
   @override
   State<GuessLobbyScreen> createState() => _GuessLobbyScreenState();
@@ -20,7 +22,14 @@ class _GuessLobbyScreenState extends State<GuessLobbyScreen> {
   @override
   void initState() {
     super.initState();
+    Music.play(widget.music);
     _load();
+  }
+
+  @override
+  void dispose() {
+    Music.stop();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -305,7 +314,7 @@ class _FriendPickScreenState extends State<_FriendPickScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => _InviteWait(inviteId: id as String, name: u['name'] as String)),
+        MaterialPageRoute(builder: (_) => InviteWait(inviteId: id as String, name: u['name'] as String)),
       );
     } catch (e) {
       if (mounted) toast(context, friendlyError(e));
@@ -351,16 +360,16 @@ class _FriendPickScreenState extends State<_FriendPickScreen> {
   }
 }
 
-class _InviteWait extends StatefulWidget {
+class InviteWait extends StatefulWidget {
   final String inviteId;
   final String name;
-  const _InviteWait({required this.inviteId, required this.name});
+  const InviteWait({super.key, required this.inviteId, required this.name});
 
   @override
-  State<_InviteWait> createState() => _InviteWaitState();
+  State<InviteWait> createState() => InviteWaitState();
 }
 
-class _InviteWaitState extends State<_InviteWait> {
+class InviteWaitState extends State<InviteWait> {
   Timer? _timer;
   bool _done = false;
 

@@ -15,8 +15,10 @@ class _GameDef {
   final List<Color> colors;
   final List<String> tags;
   final bool ready;
+  final String? cover;
+  final String? music;
   const _GameDef(this.id, this.title, this.subtitle, this.icon, this.colors, this.tags,
-      {this.ready = false});
+      {this.ready = false, this.cover, this.music});
 }
 
 const _games = [
@@ -57,11 +59,13 @@ class GamesTab extends StatefulWidget {
 
 class _GamesTabState extends State<GamesTab> {
   List<Map<String, dynamic>> _invites = [];
+  List<_GameDef> _list = _games;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
+    _loadGames();
     _timer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (widget.active) _loadInvites();
     });
@@ -70,7 +74,33 @@ class _GamesTabState extends State<GamesTab> {
   @override
   void didUpdateWidget(covariant GamesTab old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _loadInvites();
+    if (widget.active && !old.active) {
+      _loadInvites();
+      _loadGames();
+    }
+  }
+
+  Future<void> _loadGames() async {
+    try {
+      final r = await supa.from('games').select().order('sort');
+      final rows = List<Map<String, dynamic>>.from(r);
+      final out = <_GameDef>[];
+      for (final row in rows) {
+        final base = _games.firstWhere((g) => g.id == row['id'], orElse: () => _games.first);
+        out.add(_GameDef(
+          row['id'] as String,
+          row['title'] as String,
+          row['subtitle'] as String,
+          base.icon,
+          base.colors,
+          base.tags,
+          ready: row['ready'] == true,
+          cover: row['cover_url'] as String?,
+          music: row['music_url'] as String?,
+        ));
+      }
+      if (mounted && out.isNotEmpty) setState(() => _list = out);
+    } catch (_) {}
   }
 
   @override
@@ -115,7 +145,8 @@ class _GamesTabState extends State<GamesTab> {
       toast(context, 'قريباً... ${g.title}');
       return;
     }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const GuessLobbyScreen()));
+    Navigator.push(
+        context, MaterialPageRoute(builder: (_) => GuessLobbyScreen(music: g.music)));
   }
 
   @override
@@ -158,7 +189,7 @@ class _GamesTabState extends State<GamesTab> {
             mainAxisSpacing: 14,
             crossAxisSpacing: 14,
             childAspectRatio: 0.78,
-            children: [for (final g in _games) _GameCard(g: g, onTap: () => _open(g))],
+            children: [for (final g in _list) _GameCard(g: g, onTap: () => _open(g))],
           ),
         ],
       ),
@@ -188,6 +219,9 @@ class _GameCard extends StatelessWidget {
               ),
             ),
           ),
+          if (g.cover != null && g.cover!.isNotEmpty)
+            Image.network(g.cover!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox())
+          else ...[
           Positioned(
             top: -30,
             left: -30,
@@ -216,6 +250,7 @@ class _GameCard extends StatelessWidget {
             alignment: const Alignment(0, -0.35),
             child: Icon(g.icon, size: 86, color: Colors.white.withValues(alpha: 0.95)),
           ),
+          ],
           // الشريط السفلي
           Positioned(
             left: 0,

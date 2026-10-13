@@ -5,6 +5,7 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../main.dart';
+import '../audio.dart';
 import '../theme.dart';
 
 class GuessMatchScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
   @override
   void initState() {
     super.initState();
+    Music.stop();
     _refresh();
     _poll = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
     _startVoice();

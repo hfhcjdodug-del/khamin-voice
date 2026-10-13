@@ -1,21 +1,24 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
+import '../media.dart';
 import '../theme.dart';
 
 Future<String> _uploadImage(XFile f, String folder) async {
   final bytes = await f.readAsBytes();
-  var ext = f.name.contains('.') ? f.name.split('.').last.toLowerCase() : 'jpg';
-  if (!['jpg', 'jpeg', 'png', 'webp'].contains(ext)) ext = 'jpg';
-  final path = '$folder/${DateTime.now().millisecondsSinceEpoch}_${bytes.length}.$ext';
-  await supa.storage.from('game-media').uploadBinary(
-        path,
-        bytes,
-        fileOptions: FileOptions(contentType: 'image/${ext == 'jpg' ? 'jpeg' : ext}'),
-      );
-  return supa.storage.from('game-media').getPublicUrl(path);
+  final ext = extOf(f.name, ['jpg', 'jpeg', 'png', 'webp'], 'jpg');
+  return uploadMedia(
+    bucket: 'game-media',
+    folder: folder,
+    bytes: bytes,
+    ext: ext,
+    contentType: 'image/${ext == 'jpg' ? 'jpeg' : ext}',
+  );
 }
 
 class AdminScreen extends StatelessWidget {
@@ -24,16 +27,29 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
           bottom: const TabBar(
+            isScrollable: true,
             indicatorColor: C.pink,
-            tabs: [Tab(text: 'إحصائيات'), Tab(text: 'فئات اللعبة'), Tab(text: 'الغرف')],
+            tabs: [
+              Tab(text: 'إحصائيات'),
+              Tab(text: 'الألعاب'),
+              Tab(text: 'فئات خمّن'),
+              Tab(text: 'الأفلام'),
+              Tab(text: 'الغرف'),
+            ],
           ),
         ),
-        body: const TabBarView(children: [_StatsTab(), _CategoriesTab(), _RoomsTab()]),
+        body: const TabBarView(children: [
+          _StatsTab(),
+          _GamesAdminTab(),
+          _CategoriesTab(),
+          _MoviesAdminTab(),
+          _RoomsTab(),
+        ]),
       ),
     );
   }
@@ -458,6 +474,530 @@ class _RoomsTabState extends State<_RoomsTab> {
                 );
               },
             ),
+    );
+  }
+}
+
+
+// ============================ الألعاب: غلاف + أغنية ============================
+class _GamesAdminTab extends StatefulWidget {
+  const _GamesAdminTab();
+
+  @override
+  State<_GamesAdminTab> createState() => _GamesAdminTabState();
+}
+
+class _GamesAdminTabState extends State<_GamesAdminTab> {
+  List<Map<String, dynamic>> _games = [];
+  bool _loading = true;
+  String? _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('games').select().order('sort');
+      if (!mounted) return;
+      setState(() {
+        _games = List<Map<String, dynamic>>.from(r);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _update(Map<String, dynamic> g, Map<String, dynamic> vals, String ok) async {
+    try {
+      await supa.from('games').update(vals).eq('id', g['id']);
+      await _load();
+      if (mounted) toast(context, ok);
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _cover(Map<String, dynamic> g) async {
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1000, imageQuality: 85);
+    if (f == null) return;
+    setState(() => _busy = g['id'] as String);
+    try {
+      final url = await _uploadImage(f, 'games');
+      await _update(g, {'cover_url': url}, 'تم تغيير الغلاف');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  Future<void> _music(Map<String, dynamic> g) async {
+    final r = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
+    if (r == null || r.files.isEmpty) return;
+    final f = r.files.first;
+    final bytes = f.bytes;
+    if (bytes == null) {
+      toast(context, 'تعذّرت قراءة الملف');
+      return;
+    }
+    if (bytes.length > 45 * 1024 * 1024) {
+      toast(context, 'الملف كبير (الحد 45 ميغا)');
+      return;
+    }
+    setState(() => _busy = g['id'] as String);
+    try {
+      final ext = extOf(f.name, ['mp3', 'm4a', 'aac', 'wav', 'ogg'], 'mp3');
+      final url = await uploadMedia(
+        bucket: 'game-media',
+        folder: 'music',
+        bytes: bytes,
+        ext: ext,
+        contentType: ext == 'mp3' ? 'audio/mpeg' : 'audio/$ext',
+      );
+      await _update(g, {'music_url': url}, 'تمت إضافة الأغنية');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  Future<void> _musicUrl(Map<String, dynamic> g) async {
+    final c = TextEditingController(text: (g['music_url'] ?? '') as String);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('رابط الأغنية (mp3)'),
+        content: TextField(controller: c, textDirection: TextDirection.ltr),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (ok == true) await _update(g, {'music_url': c.text.trim()}, 'تم الحفظ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _games.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (_, i) {
+        final g = _games[i];
+        final cover = g['cover_url'] as String?;
+        final music = g['music_url'] as String?;
+        final hasMusic = music != null && music.isNotEmpty;
+        return GlassCard(
+          child: Row(children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: _busy == g['id']
+                    ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                    : cover == null || cover.isEmpty
+                        ? Container(color: C.glass, child: const Icon(Icons.image_outlined))
+                        : Image.network(cover, fit: BoxFit.cover),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(g['title'] as String,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                Row(children: [
+                  Icon(hasMusic ? Icons.music_note_rounded : Icons.music_off_rounded,
+                      size: 14, color: hasMusic ? C.green : Colors.white38),
+                  const SizedBox(width: 4),
+                  Text(hasMusic ? 'فيها أغنية' : 'بدون أغنية',
+                      style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                ]),
+              ]),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (v) {
+                switch (v) {
+                  case 'cover':
+                    _cover(g);
+                  case 'music':
+                    _music(g);
+                  case 'url':
+                    _musicUrl(g);
+                  case 'nomusic':
+                    _update(g, {'music_url': null}, 'تم حذف الأغنية');
+                  case 'nocover':
+                    _update(g, {'cover_url': null}, 'تمت إعادة الغلاف الافتراضي');
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'cover', child: Text('تغيير الغلاف (من الاستديو)')),
+                PopupMenuItem(value: 'music', child: Text('رفع أغنية من الهاتف')),
+                PopupMenuItem(value: 'url', child: Text('أغنية من رابط')),
+                PopupMenuItem(value: 'nomusic', child: Text('حذف الأغنية')),
+                PopupMenuItem(value: 'nocover', child: Text('الغلاف الافتراضي')),
+              ],
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+// ============================ الأفلام ============================
+class _MoviesAdminTab extends StatefulWidget {
+  const _MoviesAdminTab();
+
+  @override
+  State<_MoviesAdminTab> createState() => _MoviesAdminTabState();
+}
+
+class _MoviesAdminTabState extends State<_MoviesAdminTab> {
+  List<Map<String, dynamic>> _movies = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('movies').select().order('created_at', ascending: false);
+      if (!mounted) return;
+      setState(() {
+        _movies = List<Map<String, dynamic>>.from(r);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _addManual() async {
+    final title = TextEditingController();
+    final video = TextEditingController();
+    final sub = TextEditingController();
+    final desc = TextEditingController();
+    XFile? poster;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, setD) => AlertDialog(
+          title: const Text('إضافة فيلم'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: title, decoration: const InputDecoration(labelText: 'اسم الفيلم')),
+              TextField(
+                  controller: video,
+                  textDirection: TextDirection.ltr,
+                  decoration: const InputDecoration(labelText: 'رابط الفيلم المباشر (mp4 / m3u8)')),
+              TextField(
+                  controller: sub,
+                  textDirection: TextDirection.ltr,
+                  decoration: const InputDecoration(labelText: 'رابط الترجمة (srt / vtt) — اختياري')),
+              TextField(
+                  controller: desc, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف — اختياري')),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final f = await ImagePicker()
+                      .pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
+                  if (f != null) setD(() => poster = f);
+                },
+                icon: const Icon(Icons.image_rounded),
+                label: Text(poster == null ? 'اختيار بوستر من الاستديو' : 'تم اختيار البوستر ✓'),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('إضافة')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    if (title.text.trim().isEmpty || !video.text.trim().startsWith('http')) {
+      if (mounted) toast(context, 'اكتب الاسم ورابطاً صحيحاً يبدأ بـ http');
+      return;
+    }
+    try {
+      String? posterUrl;
+      if (poster != null) posterUrl = await _uploadImage(poster!, 'posters');
+      await supa.from('movies').insert({
+        'title': title.text.trim(),
+        'video_url': video.text.trim(),
+        'subtitle_url': sub.text.trim().isEmpty ? null : sub.text.trim(),
+        'description': desc.text.trim(),
+        'poster_url': posterUrl,
+      });
+      await _load();
+      if (mounted) toast(context, 'تمت إضافة الفيلم');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _poster(Map<String, dynamic> m) async {
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
+    if (f == null) return;
+    try {
+      final url = await _uploadImage(f, 'posters');
+      await supa.from('movies').update({'poster_url': url}).eq('id', m['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('حذف «${m['title']}»؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await supa.from('movies').delete().eq('id', m['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _toggle(Map<String, dynamic> m, bool v) async {
+    try {
+      await supa.from('movies').update({'active': v}).eq('id', m['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: C.violet,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('فيلم'),
+        onPressed: () async {
+          final v = await showModalBottomSheet<String>(
+            context: context,
+            builder: (c) => SafeArea(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                ListTile(
+                  leading: const Icon(Icons.link_rounded),
+                  title: const Text('إضافة برابط مباشر'),
+                  onTap: () => Navigator.pop(c, 'manual'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.search_rounded),
+                  title: const Text('بحث في أرشيف الإنترنت (أفلام حرة قانونية)'),
+                  onTap: () => Navigator.pop(c, 'archive'),
+                ),
+              ]),
+            ),
+          );
+          if (v == 'manual') await _addManual();
+          if (v == 'archive' && context.mounted) {
+            await Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const _ArchiveSearchScreen()));
+            await _load();
+          }
+        },
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: C.pink))
+          : _movies.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Text('لا توجد أفلام.\nاضغط «فيلم» لإضافة فيلم.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white60, height: 1.7)),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  itemCount: _movies.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final m = _movies[i];
+                    final poster = m['poster_url'] as String?;
+                    return GlassCard(
+                      child: Row(children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 48,
+                            height: 64,
+                            child: poster == null || poster.isEmpty
+                                ? Container(color: C.glass, child: const Icon(Icons.movie_rounded))
+                                : Image.network(poster, fit: BoxFit.cover),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(m['title'] as String,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        Switch(value: m['active'] == true, onChanged: (v) => _toggle(m, v)),
+                        PopupMenuButton<String>(
+                          onSelected: (v) {
+                            if (v == 'poster') _poster(m);
+                            if (v == 'del') _delete(m);
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'poster', child: Text('تغيير البوستر')),
+                            PopupMenuItem(value: 'del', child: Text('حذف الفيلم')),
+                          ],
+                        ),
+                      ]),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class _ArchiveSearchScreen extends StatefulWidget {
+  const _ArchiveSearchScreen();
+
+  @override
+  State<_ArchiveSearchScreen> createState() => _ArchiveSearchScreenState();
+}
+
+class _ArchiveSearchScreenState extends State<_ArchiveSearchScreen> {
+  final _q = TextEditingController();
+  List<Map<String, dynamic>> _res = [];
+  bool _busy = false;
+
+  Future<void> _search() async {
+    final q = _q.text.trim();
+    if (q.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final uri = Uri.https('archive.org', '/advancedsearch.php', {
+        'q': 'title:($q) AND mediatype:movies AND collection:feature_films',
+        'fl[]': ['identifier', 'title'],
+        'rows': '25',
+        'output': 'json',
+      });
+      final r = await http.get(uri).timeout(const Duration(seconds: 20));
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      final docs = (j['response']['docs'] as List).cast<Map<String, dynamic>>();
+      if (mounted) setState(() => _res = docs);
+    } catch (e) {
+      if (mounted) toast(context, 'تعذّر البحث: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _import(Map<String, dynamic> d) async {
+    final id = d['identifier'] as String;
+    setState(() => _busy = true);
+    try {
+      final r = await http
+          .get(Uri.parse('https://archive.org/metadata/$id'))
+          .timeout(const Duration(seconds: 25));
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      final files = (j['files'] as List).cast<Map<String, dynamic>>();
+      String enc(String n) => n.split('/').map(Uri.encodeComponent).join('/');
+      Map<String, dynamic>? mp4;
+      for (final f in files) {
+        final n = (f['name'] as String).toLowerCase();
+        if (n.endsWith('.mp4') && !n.contains('_thumb')) {
+          if (mp4 == null || (int.tryParse('${f['size']}') ?? 0) < (int.tryParse('${mp4['size']}') ?? 0)) {
+            mp4 = f; // الأصغر حجماً = أسرع تشغيلاً
+          }
+        }
+      }
+      if (mp4 == null) throw 'لا يوجد ملف mp4 لهذا الفيلم';
+      String? sub;
+      for (final f in files) {
+        final n = (f['name'] as String).toLowerCase();
+        if (n.endsWith('.vtt') || n.endsWith('.srt')) {
+          sub = 'https://archive.org/download/$id/${enc(f['name'] as String)}';
+          break;
+        }
+      }
+      var desc = '${j['metadata']?['description'] ?? ''}';
+      desc = desc.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (desc.length > 300) desc = '${desc.substring(0, 300)}...';
+      await supa.from('movies').insert({
+        'title': d['title'] as String,
+        'description': desc,
+        'video_url': 'https://archive.org/download/$id/${enc(mp4['name'] as String)}',
+        'subtitle_url': sub,
+        'poster_url': 'https://archive.org/services/img/$id',
+      });
+      if (mounted) {
+        toast(context, 'تمت إضافة «${d['title']}»');
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الاستيراد: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('أرشيف الإنترنت')),
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _q,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _search(),
+            decoration: InputDecoration(
+              hintText: 'اسم الفيلم بالإنكليزية، مثل: Nosferatu',
+              suffixIcon: IconButton(onPressed: _search, icon: const Icon(Icons.search_rounded)),
+            ),
+          ),
+        ),
+        if (_busy) const LinearProgressIndicator(color: C.pink),
+        Expanded(
+          child: ListView(
+            children: [
+              for (final d in _res)
+                ListTile(
+                  leading: Image.network('https://archive.org/services/img/${d['identifier']}',
+                      width: 40, errorBuilder: (_, __, ___) => const Icon(Icons.movie_rounded)),
+                  title: Text('${d['title']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                  trailing: const Icon(Icons.add_circle_rounded, color: C.pink),
+                  onTap: _busy ? null : () => _import(d),
+                ),
+            ],
+          ),
+        ),
+      ]),
     );
   }
 }
