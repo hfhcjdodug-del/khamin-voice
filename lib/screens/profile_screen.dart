@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../theme.dart';
+import 'admin_screen.dart';
 import 'chat_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _p;
   bool _loading = true;
+  bool _admin = false;
 
   bool get _isMe => widget.userId == myId;
 
@@ -26,6 +28,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _load() async {
+    if (_isMe) {
+      try {
+        final a = await supa.rpc('am_i_admin');
+        if (mounted) setState(() => _admin = a == true);
+      } catch (_) {}
+    }
     try {
       final r = await supa.rpc('get_profile', params: {'p_id': widget.userId}) as List;
       if (!mounted) return;
@@ -191,6 +199,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         if (_isMe) ...[
                           GradButton(label: 'تعديل الملف الشخصي', icon: Icons.edit_rounded, onPressed: _edit),
                           const SizedBox(height: 12),
+                          if (_admin) ...[
+                            GradButton(
+                              label: 'لوحة المدير',
+                              icon: Icons.admin_panel_settings_rounded,
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const AdminScreen()),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           GradButton(
                               label: 'تسجيل الخروج',
                               icon: Icons.logout_rounded,

@@ -89,6 +89,9 @@ class _RoomScreenState extends State<RoomScreen> {
       });
       await _room.connect(data['url'] as String, data['token'] as String);
       _connected = true;
+      try {
+        await Hardware.instance.setSpeakerphoneOn(true);
+      } catch (_) {}
       if (mounted) setState(() => _connecting = false);
 
       if (widget.isHost) await _takeSeat(0, silent: true);

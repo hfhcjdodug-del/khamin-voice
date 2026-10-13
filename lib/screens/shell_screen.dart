@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'games_tab.dart';
 import 'messages_tab.dart';
 import 'profile_screen.dart';
 import 'rooms_tab.dart';
@@ -22,8 +23,9 @@ class _ShellScreenState extends State<ShellScreen> {
     return Scaffold(
       body: IndexedStack(index: _i, children: [
         const RoomsTab(),
+        GamesTab(active: _i == 1),
         const SearchTab(),
-        MessagesTab(active: _i == 2),
+        MessagesTab(active: _i == 3),
         ProfileScreen(userId: myId, embedded: true),
       ]),
       bottomNavigationBar: Container(
@@ -41,6 +43,10 @@ class _ShellScreenState extends State<ShellScreen> {
                 icon: Icon(Icons.mic_none_rounded),
                 selectedIcon: Icon(Icons.mic_rounded),
                 label: 'الغرف'),
+            NavigationDestination(
+                icon: Icon(Icons.sports_esports_outlined),
+                selectedIcon: Icon(Icons.sports_esports_rounded),
+                label: 'ألعاب'),
             NavigationDestination(
                 icon: Icon(Icons.search_rounded), label: 'بحث'),
             NavigationDestination(

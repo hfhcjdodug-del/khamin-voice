@@ -13,6 +13,7 @@ dependencies:
   livekit_client: ^2.3.0
   permission_handler: ^11.3.1
   google_fonts: ^6.2.1
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

@@ -45,14 +45,29 @@ Deno.serve(async (req) => {
     if (!u.ok) return json({ error: "unauthorized" }, 401);
     const user = await u.json();
 
-    const { room_id } = await req.json();
-    if (!room_id || typeof room_id !== "string") return json({ error: "room_id required" }, 400);
+    const body = await req.json();
+    const roomId: string | undefined = typeof body.room_id === "string" ? body.room_id : undefined;
+    const gameId: string | undefined = typeof body.game_id === "string" ? body.game_id : undefined;
+    if (!roomId && !gameId) return json({ error: "room_id or game_id required" }, 400);
 
     const rest = (path: string) =>
       fetch(`${supaUrl}/rest/v1/${path}`, { headers: { Authorization: auth, apikey: anon } }).then((r) => r.json());
 
-    const rooms = await rest(`rooms?id=eq.${encodeURIComponent(room_id)}&select=id,is_live`);
-    if (!Array.isArray(rooms) || rooms.length === 0 || !rooms[0].is_live) return json({ error: "room not live" }, 404);
+    let lkRoom: string;
+    if (roomId) {
+      const rooms = await rest(`rooms?id=eq.${encodeURIComponent(roomId)}&select=id,is_live`);
+      if (!Array.isArray(rooms) || rooms.length === 0 || !rooms[0].is_live) return json({ error: "room not live" }, 404);
+      lkRoom = roomId;
+    } else {
+      // اللاعب يجب أن يكون طرفاً في مباراة نشطة
+      const mv = await fetch(`${supaUrl}/rest/v1/rpc/match_view`, {
+        method: "POST",
+        headers: { Authorization: auth, apikey: anon, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_id: gameId }),
+      }).then((r) => r.json());
+      if (!Array.isArray(mv) || mv.length === 0 || mv[0].status !== "active") return json({ error: "match not active" }, 404);
+      lkRoom = `game_${gameId}`;
+    }
 
     const profs = await rest(`profiles?id=eq.${user.id}&select=name`);
     const name = (Array.isArray(profs) && profs[0]?.name) || "ضيف";
@@ -60,7 +75,7 @@ Deno.serve(async (req) => {
     const now = Math.floor(Date.now() / 1000);
     const token = await signJwt({
       iss: lkKey, sub: user.id, name, nbf: now, iat: now, exp: now + 6 * 3600,
-      video: { room: room_id, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true },
+      video: { room: lkRoom, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true },
     }, lkSecret);
 
     return json({ token, url: lkUrl });
