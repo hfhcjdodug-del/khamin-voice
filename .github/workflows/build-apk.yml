@@ -27,17 +27,6 @@ jobs:
           channel: stable
           cache: true
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Bundle supabase-js into the game (no CDN dependency at runtime)
-        shell: bash
-        run: |
-          mkdir -p /tmp/sb && cd /tmp/sb && npm init -y >/dev/null && npm install @supabase/supabase-js@2.45.4 >/dev/null
-          cp node_modules/@supabase/supabase-js/dist/umd/supabase.js "$GITHUB_WORKSPACE/assets/game/supabase.js"
-          ls -l "$GITHUB_WORKSPACE/assets/game/supabase.js"
-
       - name: Flutter version
         run: flutter --version
 

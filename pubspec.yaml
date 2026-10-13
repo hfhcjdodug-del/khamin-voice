@@ -1,5 +1,5 @@
 name: khamin_voice
-description: خمّن الشخصية — لعبة ودردشة صوتية
+description: خمّن — دردشة صوتية مباشرة
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,11 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  webview_flutter: ^4.10.0
-  webview_flutter_android: ^4.3.0
+  supabase_flutter: ^2.8.0
+  livekit_client: ^2.3.0
   permission_handler: ^11.3.1
-  url_launcher: ^6.3.0
-  app_links: ^6.3.2
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -22,5 +21,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/game/
