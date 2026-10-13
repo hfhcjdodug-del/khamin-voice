@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import '../config.dart';
 import '../main.dart';
 import '../media.dart';
 import '../theme.dart';
@@ -811,6 +812,11 @@ class _MoviesAdminTabState extends State<_MoviesAdminTab> {
                   onTap: () => Navigator.pop(c, 'manual'),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.travel_explore_rounded),
+                  title: const Text('بحث في TMDB (بوستر ووصف بالعربي) + رابطك'),
+                  onTap: () => Navigator.pop(c, 'tmdb'),
+                ),
+                ListTile(
                   leading: const Icon(Icons.search_rounded),
                   title: const Text('بحث في أرشيف الإنترنت (أفلام حرة قانونية)'),
                   onTap: () => Navigator.pop(c, 'archive'),
@@ -819,6 +825,11 @@ class _MoviesAdminTabState extends State<_MoviesAdminTab> {
             ),
           );
           if (v == 'manual') await _addManual();
+          if (v == 'tmdb' && context.mounted) {
+            await Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const _TmdbSearchScreen()));
+            await _load();
+          }
           if (v == 'archive' && context.mounted) {
             await Navigator.push(
                 context, MaterialPageRoute(builder: (_) => const _ArchiveSearchScreen()));
@@ -996,6 +1007,133 @@ class _ArchiveSearchScreenState extends State<_ArchiveSearchScreen> {
                 ),
             ],
           ),
+        ),
+      ]),
+    );
+  }
+}
+
+
+class _TmdbSearchScreen extends StatefulWidget {
+  const _TmdbSearchScreen();
+
+  @override
+  State<_TmdbSearchScreen> createState() => _TmdbSearchScreenState();
+}
+
+class _TmdbSearchScreenState extends State<_TmdbSearchScreen> {
+  final _q = TextEditingController();
+  List<Map<String, dynamic>> _res = [];
+  bool _busy = false;
+
+  Future<void> _search() async {
+    final q = _q.text.trim();
+    if (q.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final uri = Uri.https('api.themoviedb.org', '/3/search/movie', {
+        'api_key': tmdbApiKey,
+        'language': 'ar',
+        'query': q,
+      });
+      final r = await http.get(uri).timeout(const Duration(seconds: 20));
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      final list = (j['results'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (mounted) setState(() => _res = list);
+    } catch (e) {
+      if (mounted) toast(context, 'تعذّر البحث: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pick(Map<String, dynamic> m) async {
+    final video = TextEditingController();
+    final sub = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('${m['title']}'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('الصق رابط الفيلم المباشر (mp4/m3u8) من مصدر مرخّص لك:',
+                style: TextStyle(fontSize: 13)),
+            TextField(
+                controller: video,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: 'رابط الفيلم')),
+            TextField(
+                controller: sub,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: 'رابط الترجمة (اختياري)')),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('إضافة')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (!video.text.trim().startsWith('http')) {
+      if (mounted) toast(context, 'الرابط غير صحيح');
+      return;
+    }
+    try {
+      final poster = m['poster_path'] as String?;
+      await supa.from('movies').insert({
+        'title': '${m['title']}',
+        'description': '${m['overview'] ?? ''}',
+        'poster_url': poster == null ? null : 'https://image.tmdb.org/t/p/w500$poster',
+        'video_url': video.text.trim(),
+        'subtitle_url': sub.text.trim().isEmpty ? null : sub.text.trim(),
+      });
+      if (mounted) {
+        toast(context, 'تمت الإضافة');
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('بحث TMDB')),
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _q,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _search(),
+            decoration: InputDecoration(
+              hintText: 'اسم الفيلم (عربي أو إنكليزي)',
+              suffixIcon: IconButton(onPressed: _search, icon: const Icon(Icons.search_rounded)),
+            ),
+          ),
+        ),
+        if (_busy) const LinearProgressIndicator(color: C.pink),
+        Expanded(
+          child: ListView(children: [
+            for (final m in _res)
+              ListTile(
+                leading: m['poster_path'] == null
+                    ? const Icon(Icons.movie_rounded)
+                    : Image.network('https://image.tmdb.org/t/p/w92${m['poster_path']}', width: 40),
+                title: Text('${m['title']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text('${(m['release_date'] ?? '')}'),
+                trailing: const Icon(Icons.add_circle_rounded, color: C.pink),
+                onTap: () => _pick(m),
+              ),
+          ]),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('This product uses the TMDB API but is not endorsed or certified by TMDB.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white38, fontSize: 11)),
         ),
       ]),
     );

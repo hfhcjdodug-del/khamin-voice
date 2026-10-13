@@ -218,7 +218,19 @@ class _MoviesTabState extends State<MoviesTab> {
                         style: TextStyle(color: Colors.white60, height: 1.7)),
                   ),
                 )
-              : RefreshIndicator(onRefresh: _load, child: _MovieGrid(movies: _movies, onTap: _open)),
+              : Column(children: [
+                  Expanded(
+                    child: RefreshIndicator(
+                        onRefresh: _load, child: _MovieGrid(movies: _movies, onTap: _open)),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                        'بيانات الأفلام من TMDB — This product uses the TMDB API but is not endorsed or certified by TMDB.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white30, fontSize: 10)),
+                  ),
+                ]),
     );
   }
 }
