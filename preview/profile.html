@@ -82,11 +82,10 @@ svg.f{fill:currentColor;stroke:none}
 .lchip{margin-inline-start:auto;font-size:12px;font-weight:800;padding:3px 12px;border-radius:12px;background:rgba(124,58,237,.45);border:1px solid #a78bfa;color:#fff}
 .tcard{margin:0 14px;padding:12px 10px 10px;border-radius:22px;background:linear-gradient(160deg,rgba(40,22,100,.55),rgba(14,8,40,.85));border:1px solid rgba(139,92,246,.4);position:relative;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .tcard h4{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;margin:0 6px 8px;color:#fff}.tcard h4 svg{color:#a78bfa;font-size:19px}
-.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 4px;padding:0 22px;min-height:150px}
-.tgrid .t{display:flex;align-items:center;justify-content:center;border-left:1px solid rgba(255,255,255,.08)}.tgrid .t:nth-child(3n){border-left:0}
-.tgrid img{width:92px;max-width:100%}
-.arr{position:absolute;top:96px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:15px;background:rgba(124,58,237,.45);border:1px solid rgba(167,139,250,.6);color:#fff;cursor:pointer}
-.arr.l{left:8px}.arr.r{right:8px}.pgs{display:flex;justify-content:center;gap:5px;margin-top:2px}.pgs i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.25)}.pgs i.on{background:#a78bfa}
+.tgrid{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px 6px 4px;touch-action:pan-x;overscroll-behavior-x:contain}
+.tgrid::-webkit-scrollbar{display:none}
+.tgrid .t{flex:0 0 104px;scroll-snap-align:start;display:flex;align-items:center;justify-content:center}
+.tgrid img{width:100px;max-width:100%;display:block}
 .row2{display:grid;grid-template-columns:1fr 1.05fr;gap:10px}
 .cov{padding:0;overflow:hidden;position:relative;min-height:132px;border-radius:16px}.cov svg.sc2{position:absolute;inset:0;width:100%;height:100%}.cov span{position:absolute;bottom:8px;left:10px;color:#fff;font-size:12px;font-weight:700;text-shadow:0 1px 6px #000}
 .about p{font-size:13.5px;line-height:1.7;color:#4a4468;margin:0 0 8px;position:relative;padding:0 2px}.about .tags{display:flex;gap:6px;flex-wrap:wrap}
@@ -200,7 +199,7 @@ svg.f{fill:currentColor;stroke:none}
   <div class="idp"><svg class="i"><use href="#copy"/></svg>ID 100004</div>
   <div class="counts"><div data-s="fers"><strong>3</strong>المتابعون</div><i></i><div data-s="fing"><strong>1</strong>يتابعهم</div><i></i><div data-s="vis"><strong>145</strong>الزوار</div></div>
  </div>
- <div class="tcard"><h4><svg class="i f"><use href="#crown"/></svg>الألقاب والشارات<span class="lchip" id="lchip">المستوى 10</span></h4><div class="tgrid" id="tgrid"></div><div class="arr l" id="aL"><svg class="i"><use href="#chev"/></svg></div><div class="arr r" id="aR"><svg class="i"><use href="#chevr"/></svg></div><div class="pgs" id="pgs"></div></div>
+ <div class="tcard"><h4><svg class="i f"><use href="#crown"/></svg>الألقاب والشارات<span class="lchip" id="lchip">المستوى 10</span></h4><div class="tgrid" id="tgrid"></div></div>
  <div class="tabs">
   <div class="tab" data-p="fam"><svg class="i"><use href="#users"/></svg>العائلة</div>
   <div class="tab" data-p="honor"><svg class="i"><use href="#shield"/></svg>الشرف</div>
@@ -273,8 +272,7 @@ var FR=[['#8b5cf6','#d8c8ff'],['#3b82f6','#bfdbfe'],['#7c3aed','#93c5fd'],['#f59
 function $(i){return document.getElementById(i)}
 function mk(arr,cont){cont.innerHTML='';arr.forEach(function(u){var im=new Image();im.src=u;cont.appendChild(im)});return [].slice.call(cont.children)}
 var tg=mk(D.tt,$('tg')),lg=mk(D.lv,$('lg')),curTi=4,page=0;
-function renderT(){var e=[];for(var i=curTi;i>=0;i--)e.push(i);var np=Math.max(1,Math.ceil(e.length/6));page=Math.min(page,np-1);var g=$('tgrid');g.innerHTML='';e.slice(page*6,page*6+6).forEach(function(i){var d=document.createElement('div');d.className='t';var im=new Image();im.src=D.tt[i];d.appendChild(im);g.appendChild(d)});var p='';for(var k=0;k<np;k++)p+='<i class="'+(k===page?'on':'')+'"></i>';$('pgs').innerHTML=p;$('aL').style.visibility=np>1?'visible':'hidden';$('aR').style.visibility=np>1?'visible':'hidden'}
-$('aL').onclick=function(){var np=Math.max(1,Math.ceil((curTi+1)/6));page=(page+1)%np;renderT()};$('aR').onclick=function(){var np=Math.max(1,Math.ceil((curTi+1)/6));page=(page+np-1)%np;renderT()};
+function renderT(){var g=$('tgrid');g.innerHTML='';for(var i=curTi;i>=0;i--){var d=document.createElement('div');d.className='t';var im=new Image();im.src=D.tt[i];d.appendChild(im);g.appendChild(d)}g.scrollLeft=0}
 var PH=[['#2a1466','#7c3aed'],['#0b1a4d','#3b82f6'],['#1a0b3d','#c026d3'],['#0a0a2a','#6366f1'],['#2d1264','#ec4899'],['#10224f','#22d3ee'],['#240a4a','#8b5cf6'],['#0b0b30','#a78bfa'],['#32103f','#f472b6'],['#071a3a','#60a5fa']];
 $('ph').innerHTML=PH.map(function(c,i){return '<i style="background:radial-gradient(circle at '+(25+i*7%50)+'% '+(25+i*11%40)+'%,rgba(255,255,255,.85) 0 4%,transparent 5%),linear-gradient(160deg,'+c[0]+','+c[1]+')"></i>'}).join('');
 function set(L){
