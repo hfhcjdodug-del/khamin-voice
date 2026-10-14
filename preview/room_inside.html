@@ -139,7 +139,7 @@ function seatHTML(x,idx,big){
  var cls='seat'+(big?' big':'')+(x.mt?' mt':'')+((!x.mt&&(x.id==='z'||x.id==='o'||x.id==='k'))?' sp':'');
  var b='';if(x.mt)b+='<div class="badge mo"><svg class="i"><use href="#micoff"/></svg></div>';
  if(x.role==='owner')b+='<div class="badge rl"><svg class="i f"><use href="#crown"/></svg></div>';else if(x.role==='mod')b+='<div class="badge sh"><svg class="i"><use href="#shield"/></svg></div>';
- return '<div class="'+cls+'" data-u="'+x.id+'"><div class="pad">'+skinLayer()+'<div class="av" style="'+avStyle(x)+'">'+x.n[0]+'</div>'+b+'<div class="lvb"><img src="'+LVI[x.l]+'" alt=""></div></div><div class="nm">'+x.n+'</div></div>';
+ return '<div class="'+cls+'" data-u="'+x.id+'"><div class="pad">'+skinLayer()+'<div class="av" style="'+avStyle(x)+'">'+x.n[0]+'</div>'+b+'</div><div class="nm">'+x.n+'</div></div>';
 }
 function skinLayer(){var bg=skinImg?'url('+skinImg+')':(SK[skin]||'none');return '<div class="skin" style="background-image:'+bg+';'+(skinImg?'border:2px solid rgba(255,255,255,.5)':'')+'"></div>'}
 function bySeat(i){return st.users.filter(function(x){return x.seat===i})[0]}
