@@ -1,7 +1,152 @@
 [
-{"from":1,"to":2,"name":"المبتدئ"},{"from":3,"to":4,"name":"الحالم"},{"from":5,"to":6,"name":"المستكشف"},{"from":7,"to":8,"name":"المحارب الصامت"},{"from":9,"to":10,"name":"الأسطورة الأولى"},
-{"from":11,"to":12,"name":"صديق الجميع"},{"from":13,"to":14,"name":"المغامر"},{"from":15,"to":16,"name":"الذئب الأزرق"},{"from":17,"to":18,"name":"المتميز"},{"from":19,"to":20,"name":"قمة البداية"},
-{"from":21,"to":22,"name":"النجم"},{"from":23,"to":24,"name":"الفرسان"},{"from":25,"to":26,"name":"صانع المجد"},{"from":27,"to":28,"name":"المدافع"},{"from":29,"to":30,"name":"سيد المجال"},
-{"from":31,"to":32,"name":"الملك"},{"from":33,"to":34,"name":"القائد"},{"from":35,"to":36,"name":"الأسطوري"},{"from":37,"to":38,"name":"الفاتح"},{"from":39,"to":40,"name":"الزعيم"},
-{"from":41,"to":42,"name":"الأسطورة"},{"from":43,"to":44,"name":"سيد الكون"},{"from":45,"to":46,"name":"المهيب"},{"from":47,"to":48,"name":"الخلد"},{"from":49,"to":50,"name":"الأسطورة المطلقة"}
+ {
+  "from": 1,
+  "to": 2,
+  "name": "المبتدئ",
+  "asset": "assets/titles/1.png"
+ },
+ {
+  "from": 3,
+  "to": 4,
+  "name": "الحالم",
+  "asset": "assets/titles/2.png"
+ },
+ {
+  "from": 5,
+  "to": 6,
+  "name": "المستكشف",
+  "asset": "assets/titles/3.png"
+ },
+ {
+  "from": 7,
+  "to": 8,
+  "name": "المحارب الصامت",
+  "asset": "assets/titles/4.png"
+ },
+ {
+  "from": 9,
+  "to": 10,
+  "name": "الأسطورة الأولى",
+  "asset": "assets/titles/5.png"
+ },
+ {
+  "from": 11,
+  "to": 12,
+  "name": "صديق الجميع",
+  "asset": "assets/titles/6.png"
+ },
+ {
+  "from": 13,
+  "to": 14,
+  "name": "المغامر",
+  "asset": "assets/titles/7.png"
+ },
+ {
+  "from": 15,
+  "to": 16,
+  "name": "الذئب الأزرق",
+  "asset": "assets/titles/8.png"
+ },
+ {
+  "from": 17,
+  "to": 18,
+  "name": "المتميز",
+  "asset": "assets/titles/9.png"
+ },
+ {
+  "from": 19,
+  "to": 20,
+  "name": "قمة البداية",
+  "asset": "assets/titles/10.png"
+ },
+ {
+  "from": 21,
+  "to": 22,
+  "name": "النجم",
+  "asset": "assets/titles/11.png"
+ },
+ {
+  "from": 23,
+  "to": 24,
+  "name": "الفرسان",
+  "asset": "assets/titles/12.png"
+ },
+ {
+  "from": 25,
+  "to": 26,
+  "name": "صانع المجد",
+  "asset": "assets/titles/13.png"
+ },
+ {
+  "from": 27,
+  "to": 28,
+  "name": "المدافع",
+  "asset": "assets/titles/14.png"
+ },
+ {
+  "from": 29,
+  "to": 30,
+  "name": "سيد المجال",
+  "asset": "assets/titles/15.png"
+ },
+ {
+  "from": 31,
+  "to": 32,
+  "name": "الملك",
+  "asset": "assets/titles/16.png"
+ },
+ {
+  "from": 33,
+  "to": 34,
+  "name": "القائد",
+  "asset": "assets/titles/17.png"
+ },
+ {
+  "from": 35,
+  "to": 36,
+  "name": "الأسطوري",
+  "asset": "assets/titles/18.png"
+ },
+ {
+  "from": 37,
+  "to": 38,
+  "name": "الفاتح",
+  "asset": "assets/titles/19.png"
+ },
+ {
+  "from": 39,
+  "to": 40,
+  "name": "الزعيم",
+  "asset": "assets/titles/20.png"
+ },
+ {
+  "from": 41,
+  "to": 42,
+  "name": "الأسطورة",
+  "asset": "assets/titles/21.png"
+ },
+ {
+  "from": 43,
+  "to": 44,
+  "name": "سيد الكون",
+  "asset": "assets/titles/22.png"
+ },
+ {
+  "from": 45,
+  "to": 46,
+  "name": "المهيب",
+  "asset": "assets/titles/23.png"
+ },
+ {
+  "from": 47,
+  "to": 48,
+  "name": "الخالد",
+  "asset": "assets/titles/24.png"
+ },
+ {
+  "from": 49,
+  "to": 50,
+  "name": "الأسطورة المطلقة",
+  "asset": "assets/titles/25.png"
+ }
 ]
