@@ -30,6 +30,7 @@ class _RoomScreenState extends State<RoomScreen> {
   final Room _room = Room();
   EventsListener<RoomEvent>? _events;
   Timer? _beat;
+  Timer? _xpTimer;
   StreamSubscription<List<Map<String, dynamic>>>? _msgSub;
   StreamSubscription<List<Map<String, dynamic>>>? _seatSub;
   final _input = TextEditingController();
@@ -61,6 +62,12 @@ class _RoomScreenState extends State<RoomScreen> {
     return null;
   }
 
+  Future<void> _gainXp() async {
+    try {
+      await supa.rpc('add_xp', params: {'p_kind': 'room'});
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +80,8 @@ class _RoomScreenState extends State<RoomScreen> {
       final ok = await supa.rpc('room_heartbeat', params: {'p_room': widget.roomId});
       if (ok != true) throw 'الغرفة منتهية';
       _beat = Timer.periodic(const Duration(seconds: 15), (_) => _heartbeat());
+      _gainXp();
+      _xpTimer = Timer.periodic(const Duration(minutes: 10), (_) => _gainXp());
       _listenMessages();
       _listenSeats();
 
@@ -298,6 +307,7 @@ class _RoomScreenState extends State<RoomScreen> {
   void dispose() {
     _closed = true;
     _beat?.cancel();
+    _xpTimer?.cancel();
     _msgSub?.cancel();
     _seatSub?.cancel();
     _events?.dispose();

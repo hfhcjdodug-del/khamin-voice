@@ -34,6 +34,11 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
   void initState() {
     super.initState();
     Music.stop();
+    Future(() async {
+      try {
+        await supa.rpc('add_xp', params: {'p_kind': 'game'});
+      } catch (_) {}
+    });
     _refresh();
     _poll = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
     _startVoice();

@@ -8,7 +8,8 @@ import 'chat_screen.dart';
 
 class MessagesTab extends StatefulWidget {
   final bool active;
-  const MessagesTab({super.key, required this.active});
+  final bool embedded;
+  const MessagesTab({super.key, required this.active, this.embedded = false});
 
   @override
   State<MessagesTab> createState() => _MessagesTabState();
@@ -56,7 +57,9 @@ class _MessagesTabState extends State<MessagesTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الرسائل', style: TextStyle(fontWeight: FontWeight.w800))),
+      appBar: widget.embedded
+          ? null
+          : AppBar(title: const Text('الرسائل', style: TextStyle(fontWeight: FontWeight.w800))),
       body: RefreshIndicator(
         onRefresh: _load,
         child: _loading

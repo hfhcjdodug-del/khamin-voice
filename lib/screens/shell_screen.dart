@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'games_tab.dart';
 import 'guess_match_screen.dart';
-import 'movies_tab.dart';
+import 'friends_tab.dart';
+import 'home_tab.dart';
 import 'watch_screen.dart';
-import 'messages_tab.dart';
 import 'profile_screen.dart';
 import 'rooms_tab.dart';
-import 'search_tab.dart';
 import '../main.dart';
 
 class ShellScreen extends StatefulWidget {
@@ -125,51 +123,71 @@ class _ShellScreenState extends State<ShellScreen> {
     }
   }
 
+  Widget _navItem(int idx, IconData icon, IconData sel, String label) {
+    final on = _i == idx;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _i = idx),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(on ? sel : icon, color: on ? C.pink : Colors.white54, size: 26),
+          const SizedBox(height: 2),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: on ? FontWeight.w800 : FontWeight.w500,
+                  color: on ? Colors.white : Colors.white54)),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _i, children: [
-        const RoomsTab(),
-        GamesTab(active: _i == 1),
-        MoviesTab(active: _i == 2),
-        const SearchTab(),
-        MessagesTab(active: _i == 4),
+        HomeTab(active: _i == 0, onSeeRooms: () => setState(() => _i = 1)),
+        RoomsTab(active: _i == 1),
+        FriendsTab(active: _i == 2),
         ProfileScreen(userId: myId, embedded: true),
       ]),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xE60F0A26),
-          border: Border(top: BorderSide(color: C.glassBorder)),
+        decoration: BoxDecoration(
+          color: const Color(0xF20F0A26),
+          border: const Border(top: BorderSide(color: C.glassBorder)),
+          boxShadow: [BoxShadow(color: C.violet.withValues(alpha: 0.2), blurRadius: 20)],
         ),
-        child: NavigationBar(
-          backgroundColor: Colors.transparent,
-          indicatorColor: C.violet.withValues(alpha: 0.35),
-          selectedIndex: _i,
-          onDestinationSelected: (v) => setState(() => _i = v),
-          destinations: const [
-            NavigationDestination(
-                icon: Icon(Icons.mic_none_rounded),
-                selectedIcon: Icon(Icons.mic_rounded),
-                label: 'الغرف'),
-            NavigationDestination(
-                icon: Icon(Icons.sports_esports_outlined),
-                selectedIcon: Icon(Icons.sports_esports_rounded),
-                label: 'ألعاب'),
-            NavigationDestination(
-                icon: Icon(Icons.movie_outlined),
-                selectedIcon: Icon(Icons.movie_rounded),
-                label: 'أفلام'),
-            NavigationDestination(
-                icon: Icon(Icons.search_rounded), label: 'بحث'),
-            NavigationDestination(
-                icon: Icon(Icons.chat_bubble_outline_rounded),
-                selectedIcon: Icon(Icons.chat_bubble_rounded),
-                label: 'الرسائل'),
-            NavigationDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: 'حسابي'),
-          ],
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 66,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'الرئيسية'),
+              _navItem(1, Icons.sports_esports_outlined, Icons.sports_esports_rounded, 'الغرف'),
+              Expanded(
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () => createRoomFlow(context),
+                    child: Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                            colors: [C.violet, C.pink],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight),
+                        border: Border.all(color: Colors.white24, width: 2),
+                        boxShadow: [BoxShadow(color: C.violet.withValues(alpha: 0.7), blurRadius: 18)],
+                      ),
+                      child: const Icon(Icons.mic_rounded, size: 28),
+                    ),
+                  ),
+                ),
+              ),
+              _navItem(2, Icons.people_outline_rounded, Icons.people_rounded, 'الأصدقاء'),
+              _navItem(3, Icons.person_outline_rounded, Icons.person_rounded, 'حسابي'),
+            ]),
+          ),
         ),
       ),
     );
