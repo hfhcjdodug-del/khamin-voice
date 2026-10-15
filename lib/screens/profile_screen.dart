@@ -93,6 +93,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _setLevel() async {
+    final c = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('تعيين المستوى (1 - 100)'),
+        content: TextField(controller: c, keyboardType: TextInputType.number),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('تطبيق')),
+        ],
+      ),
+    );
+    final l = int.tryParse(c.text.trim());
+    if (ok != true || l == null) return;
+    try {
+      await supa.rpc('admin_set_level', params: {'p_id': _p!['id'], 'p_level': l});
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
   Future<void> _edit() async {
     if (await showEditProfile(context, _p!)) await _load();
   }
@@ -649,6 +672,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'إنهاء VIP', outlined: true, dense: true, onPressed: () => _vip(0)),
           ),
         ]),
+        const SizedBox(height: 8),
+        GradButton(
+            label: 'تعيين المستوى', icon: Icons.trending_up_rounded, outlined: true, dense: true,
+            onPressed: _setLevel),
       ],
       const SizedBox(height: 10),
     ]);

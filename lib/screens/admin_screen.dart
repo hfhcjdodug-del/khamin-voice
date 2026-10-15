@@ -22,13 +22,35 @@ Future<String> _uploadImage(XFile f, String folder) async {
   );
 }
 
+
+Future<String?> _askText(BuildContext context, String title, String initial, {int max = 40}) async {
+  final c = TextEditingController(text: initial);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: Text(title),
+      content: TextField(controller: c, maxLength: max),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حفظ')),
+      ],
+    ),
+  );
+  if (ok != true) return null;
+  final t = c.text.trim();
+  return t.length < 2 ? null : t;
+}
+
+Future<void> _setSetting(String key, String value) =>
+    supa.from('app_settings').upsert({'key': key, 'value': value});
+
 class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -41,6 +63,8 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'فئات خمّن'),
               Tab(text: 'الأفلام'),
               Tab(text: 'الغرف'),
+              Tab(text: 'إشعارات'),
+              Tab(text: 'مستخدمون'),
             ],
           ),
         ),
@@ -50,6 +74,8 @@ class AdminScreen extends StatelessWidget {
           _CategoriesTab(),
           _MoviesAdminTab(),
           _RoomsTab(),
+          _NoticesAdminTab(),
+          _UsersAdminTab(),
         ]),
       ),
     );
@@ -127,6 +153,8 @@ class _CategoriesTab extends StatefulWidget {
 class _CategoriesTabState extends State<_CategoriesTab> {
   List<Map<String, dynamic>> _cats = [];
   bool _loading = true;
+  String _mixedName = 'منوّع';
+  String _mixedCover = '';
 
   @override
   void initState() {
@@ -137,6 +165,11 @@ class _CategoriesTabState extends State<_CategoriesTab> {
   Future<void> _load() async {
     try {
       final r = await supa.from('game_categories').select().order('sort').order('created_at');
+      final st = await supa.from('app_settings').select().inFilter('key', ['mixed_name', 'mixed_cover']);
+      for (final x in st) {
+        if (x['key'] == 'mixed_name' && (x['value'] as String).isNotEmpty) _mixedName = x['value'] as String;
+        if (x['key'] == 'mixed_cover') _mixedCover = x['value'] as String;
+      }
       if (!mounted) return;
       setState(() {
         _cats = List<Map<String, dynamic>>.from(r);
@@ -179,6 +212,41 @@ class _CategoriesTabState extends State<_CategoriesTab> {
       await supa.from('game_categories').update({'cover_url': url}).eq('id', c['id']);
       await _load();
       if (mounted) toast(context, 'تم تغيير الغلاف');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    }
+  }
+
+  Future<void> _rename(Map<String, dynamic> c) async {
+    final n = await _askText(context, 'اسم الفئة', c['name'] as String);
+    if (n == null) return;
+    try {
+      await supa.from('game_categories').update({'name': n}).eq('id', c['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _mixedRename() async {
+    final n = await _askText(context, 'اسم قسم «منوّع»', _mixedName);
+    if (n == null) return;
+    try {
+      await _setSetting('mixed_name', n);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _mixedCoverPick() async {
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 900, imageQuality: 85);
+    if (f == null) return;
+    try {
+      final url = await _uploadImage(f, 'covers');
+      await _setSetting('mixed_cover', url);
+      await _load();
+      if (mounted) toast(context, 'تم تغيير غلاف المنوّع');
     } catch (e) {
       if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
     }
@@ -227,10 +295,49 @@ class _CategoriesTabState extends State<_CategoriesTab> {
           ? const Center(child: CircularProgressIndicator(color: C.pink))
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-              itemCount: _cats.length,
+              itemCount: _cats.length + 1,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (_, i) {
-                final c = _cats[i];
+                if (i == 0) {
+                  return GlassCard(
+                    child: Row(children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: _mixedCover.isEmpty
+                              ? Container(color: C.glass, child: const Icon(Icons.auto_awesome_rounded))
+                              : Image.network(_mixedCover, fit: BoxFit.cover),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(_mixedName,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                          const Text('قسم ثابت (كل الصور)',
+                              style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        ]),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (v) {
+                          if (v == 'cover') _mixedCoverPick();
+                          if (v == 'name') _mixedRename();
+                          if (v == 'nocover') {
+                            _setSetting('mixed_cover', '').then((_) => _load());
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'cover', child: Text('تغيير الغلاف')),
+                          PopupMenuItem(value: 'name', child: Text('تغيير الاسم')),
+                          PopupMenuItem(value: 'nocover', child: Text('الغلاف الافتراضي')),
+                        ],
+                      ),
+                    ]),
+                  );
+                }
+                final c = _cats[i - 1];
                 final cover = c['cover_url'] as String?;
                 return GlassCard(
                   onTap: () => Navigator.push(
@@ -260,10 +367,12 @@ class _CategoriesTabState extends State<_CategoriesTab> {
                     PopupMenuButton<String>(
                       onSelected: (v) {
                         if (v == 'cover') _setCover(c);
+                        if (v == 'name') _rename(c);
                         if (v == 'del') _delete(c);
                       },
                       itemBuilder: (_) => const [
                         PopupMenuItem(value: 'cover', child: Text('تغيير الغلاف')),
+                        PopupMenuItem(value: 'name', child: Text('تغيير الاسم')),
                         PopupMenuItem(value: 'del', child: Text('حذف الفئة')),
                       ],
                     ),
@@ -638,9 +747,14 @@ class _GamesAdminTabState extends State<_GamesAdminTab> {
                     _update(g, {'music_url': null}, 'تم حذف الأغنية');
                   case 'nocover':
                     _update(g, {'cover_url': null}, 'تمت إعادة الغلاف الافتراضي');
+                  case 'name':
+                    _askText(context, 'اسم اللعبة', g['title'] as String).then((n) {
+                      if (n != null) _update(g, {'title': n}, 'تم تغيير الاسم');
+                    });
                 }
               },
               itemBuilder: (_) => const [
+                PopupMenuItem(value: 'name', child: Text('تغيير اسم اللعبة')),
                 PopupMenuItem(value: 'cover', child: Text('تغيير الغلاف (من الاستديو)')),
                 PopupMenuItem(value: 'music', child: Text('رفع أغنية من الهاتف')),
                 PopupMenuItem(value: 'url', child: Text('أغنية من رابط')),
@@ -1137,5 +1251,201 @@ class _TmdbSearchScreenState extends State<_TmdbSearchScreen> {
         ),
       ]),
     );
+  }
+}
+
+
+// ============================ الإشعارات ============================
+class _NoticesAdminTab extends StatefulWidget {
+  const _NoticesAdminTab();
+
+  @override
+  State<_NoticesAdminTab> createState() => _NoticesAdminTabState();
+}
+
+class _NoticesAdminTabState extends State<_NoticesAdminTab> {
+  final _title = TextEditingController();
+  final _body = TextEditingController();
+  final _url = TextEditingController();
+  String _kind = 'info';
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _body.dispose();
+    _url.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_title.text.trim().isEmpty) {
+      toast(context, 'اكتب عنوان الإشعار');
+      return;
+    }
+    setState(() => _sending = true);
+    try {
+      final res = await supa.functions.invoke('send-push', body: {
+        'title': _title.text.trim(),
+        'body': _body.text.trim(),
+        'kind': _kind,
+        'url': _url.text.trim(),
+      });
+      final d = res.data;
+      if (!mounted) return;
+      if (d is Map && d['push'] == true) {
+        toast(context, 'تم الإرسال داخل التطبيق وخارجه');
+        _title.clear();
+        _body.clear();
+        _url.clear();
+      } else if (d is Map && d['inApp'] == true) {
+        final why = (d['error'] ?? d['note'] ?? '').toString();
+        toast(context, 'وصل داخل التطبيق فقط. إشعار النظام لم يُرسل: $why');
+      } else {
+        toast(context, 'فشل الإرسال: ${d is Map ? d['error'] : d}');
+      }
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الإرسال: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Text('أرسل إشعاراً لكل المستخدمين',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 4),
+      const Text('يظهر كشريط لمن هو داخل التطبيق، وكإشعار نظام لمن هو خارجه.',
+          style: TextStyle(color: Colors.white60, fontSize: 12)),
+      const SizedBox(height: 14),
+      Wrap(spacing: 8, children: [
+        for (final k in const [('info', 'إعلان'), ('update', 'تحديث'), ('alert', 'تنبيه')])
+          ChoiceChip(
+            label: Text(k.$2),
+            selected: _kind == k.$1,
+            onSelected: (_) => setState(() => _kind = k.$1),
+          ),
+      ]),
+      const SizedBox(height: 10),
+      TextField(
+          controller: _title,
+          maxLength: 80,
+          decoration: const InputDecoration(labelText: 'العنوان')),
+      const SizedBox(height: 6),
+      TextField(
+          controller: _body,
+          maxLength: 400,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: 'النص')),
+      const SizedBox(height: 6),
+      TextField(
+          controller: _url,
+          textDirection: TextDirection.ltr,
+          decoration: const InputDecoration(
+              labelText: 'رابط (اختياري) مثل رابط تحميل التحديث', hintText: 'https://')),
+      const SizedBox(height: 14),
+      GradButton(
+        label: _sending ? 'جارٍ الإرسال...' : 'إرسال',
+        icon: Icons.send_rounded,
+        onPressed: _sending ? null : _send,
+      ),
+    ]);
+  }
+}
+
+// ============================ المستخدمون (رفع المستوى) ============================
+class _UsersAdminTab extends StatefulWidget {
+  const _UsersAdminTab();
+
+  @override
+  State<_UsersAdminTab> createState() => _UsersAdminTabState();
+}
+
+class _UsersAdminTabState extends State<_UsersAdminTab> {
+  final _q = TextEditingController();
+  final _lvl = TextEditingController();
+  Map<String, dynamic>? _u;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _q.dispose();
+    _lvl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _find() async {
+    final t = _q.text.trim().replaceAll('@', '');
+    if (t.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final n = int.tryParse(t);
+      final r = n != null
+          ? await supa.from('profiles').select('id,name,username,num,xp').eq('num', n).maybeSingle()
+          : await supa.from('profiles').select('id,name,username,num,xp').eq('username', t).maybeSingle();
+      if (!mounted) return;
+      setState(() => _u = r);
+      if (r == null) toast(context, 'لم أجد حساباً بهذا اليوزر أو الرقم');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setLevel() async {
+    final l = int.tryParse(_lvl.text.trim());
+    if (_u == null || l == null || l < 1 || l > 100) {
+      toast(context, 'اكتب مستوى بين 1 و 100');
+      return;
+    }
+    try {
+      await supa.rpc('admin_set_level', params: {'p_id': _u!['id'], 'p_level': l});
+      await _find();
+      if (mounted) toast(context, 'تم ضبط المستوى على $l');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = _u;
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Text('رفع مستوى أي حساب', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 10),
+      TextField(
+        controller: _q,
+        textDirection: TextDirection.ltr,
+        onSubmitted: (_) => _find(),
+        decoration: InputDecoration(
+          labelText: 'اليوزر أو رقم ID',
+          suffixIcon: IconButton(onPressed: _busy ? null : _find, icon: const Icon(Icons.search_rounded)),
+        ),
+      ),
+      if (u != null) ...[
+        const SizedBox(height: 14),
+        GlassCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(u['name'] as String, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+            Text('@${u['username']} · ID ${u['num']}',
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(color: Colors.white60)),
+            const SizedBox(height: 6),
+            Text('النقاط: ${u['xp']}', style: const TextStyle(color: Colors.white70)),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _lvl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'المستوى الجديد (1 - 100)'),
+        ),
+        const SizedBox(height: 12),
+        GradButton(label: 'تطبيق المستوى', icon: Icons.trending_up_rounded, onPressed: _setLevel),
+      ],
+    ]);
   }
 }

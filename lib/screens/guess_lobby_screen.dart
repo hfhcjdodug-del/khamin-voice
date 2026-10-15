@@ -18,6 +18,8 @@ class GuessLobbyScreen extends StatefulWidget {
 class _GuessLobbyScreenState extends State<GuessLobbyScreen> {
   List<Map<String, dynamic>> _cats = [];
   bool _loading = true;
+  String _mixedName = 'منوّع';
+  String? _mixedCover;
 
   @override
   void initState() {
@@ -40,6 +42,14 @@ class _GuessLobbyScreenState extends State<GuessLobbyScreen> {
           .eq('active', true)
           .order('sort')
           .order('created_at');
+      try {
+        final st = await supa.from('app_settings').select().inFilter('key', ['mixed_name', 'mixed_cover']);
+        for (final x in st) {
+          final v = (x['value'] ?? '') as String;
+          if (x['key'] == 'mixed_name' && v.isNotEmpty) _mixedName = v;
+          if (x['key'] == 'mixed_cover' && v.isNotEmpty) _mixedCover = v;
+        }
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _cats = List<Map<String, dynamic>>.from(r);
@@ -130,7 +140,7 @@ class _GuessLobbyScreenState extends State<GuessLobbyScreen> {
                   crossAxisSpacing: 12,
                   childAspectRatio: 1.25,
                   children: [
-                    _CatTile(name: 'منوّع', cover: null, onTap: () => _pick(null, 'منوّع')),
+                    _CatTile(name: _mixedName, cover: _mixedCover, onTap: () => _pick(null, _mixedName)),
                     for (final c in _cats)
                       _CatTile(
                         name: c['name'] as String,

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'push.dart';
 import 'screens/shell_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'theme.dart';
@@ -20,6 +21,7 @@ Future<void> main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  initPush();
   runApp(const KhaminApp());
 }
 
@@ -31,6 +33,7 @@ class KhaminApp extends StatelessWidget {
     final base = ThemeData.dark(useMaterial3: true);
     return MaterialApp(
       title: 'نتونس',
+      scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar'),
       builder: (context, child) => Directionality(

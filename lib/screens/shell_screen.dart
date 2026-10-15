@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../push.dart';
 import '../theme.dart';
 import 'guess_match_screen.dart';
 import 'friends_tab.dart';
@@ -29,11 +30,13 @@ class _ShellScreenState extends State<ShellScreen> {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _checkInvites());
     _checkInvites();
+    NoticeListener.start();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    NoticeListener.stop();
     super.dispose();
   }
 

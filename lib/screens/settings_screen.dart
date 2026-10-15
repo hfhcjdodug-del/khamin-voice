@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../theme.dart';
+import '../push.dart';
 import 'profile_actions.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -79,7 +80,10 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 )),
         _title('التطبيق'),
-        _row(context, Icons.notifications_rounded, 'الإشعارات', sub: 'قريباً'),
+        _row(context, Icons.notifications_rounded, 'إشعارات التطبيق',
+            sub: 'إعلانات وتحديثات من الإدارة',
+            onTap: () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const NoticesScreen()))),
         _row(context, Icons.lock_rounded, 'الخصوصية', sub: 'قريباً'),
         _row(context, Icons.language_rounded, 'اللغة', sub: 'العربية'),
         _row(context, Icons.headset_mic_rounded, 'المساعدة', sub: 'قريباً'),
