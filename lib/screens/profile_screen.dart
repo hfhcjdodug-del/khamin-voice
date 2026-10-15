@@ -12,6 +12,7 @@ import 'follows_screen.dart';
 import 'challenges_screen.dart';
 import 'chat_screen.dart';
 import 'profile_actions.dart';
+import 'rewards_screen.dart';
 import 'settings_screen.dart';
 import 'visitors_screen.dart';
 
@@ -113,6 +114,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 : 'ياقوتاتك تساوي ${rubies * rubyToGems} 💎  (الياقوتة = $rubyToGems 💎)',
             style: const TextStyle(color: Colors.white60, fontSize: 12)),
         const SizedBox(height: 8),
+        InkWell(
+          onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const RewardsScreen()));
+            _loadWallet();
+          },
+          child: const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Row(children: [
+              Text('🎁', style: TextStyle(fontSize: 16)),
+              SizedBox(width: 6),
+              Text('مكافآت مجانية: ماسات يومية وروليت ومهام',
+                  style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12, fontWeight: FontWeight.w800)),
+            ]),
+          ),
+        ),
         Row(children: [
           conv('تحويل 1', 1, rubies >= 1),
           const SizedBox(width: 6),

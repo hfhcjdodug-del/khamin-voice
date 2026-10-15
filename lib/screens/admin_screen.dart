@@ -51,7 +51,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 9,
+      length: 10,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -68,6 +68,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'مستخدمون'),
               Tab(text: 'المدفوعات'),
               Tab(text: 'الهدايا'),
+              Tab(text: 'المهام'),
             ],
           ),
         ),
@@ -81,6 +82,7 @@ class AdminScreen extends StatelessWidget {
           _UsersAdminTab(),
           _PaymentsAdminTab(),
           _GiftsAdminTab(),
+          _MissionsAdminTab(),
         ]),
       ),
     );
@@ -1781,5 +1783,146 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
               },
             ),
     );
+  }
+}
+
+
+const _missionKinds = {
+  'room_visit': 'الوقت في الغرف (الوحدة = 10 دقائق)',
+  'play_game': 'لعب تحديات خمّن الشخصية',
+  'send_gift': 'إرسال هدايا',
+  'send_msg': 'كتابة رسائل في الغرف',
+  'watch_ad': 'مشاهدة إعلان من المكافآت',
+};
+
+class _MissionsAdminTab extends StatefulWidget {
+  const _MissionsAdminTab();
+
+  @override
+  State<_MissionsAdminTab> createState() => _MissionsAdminTabState();
+}
+
+class _MissionsAdminTabState extends State<_MissionsAdminTab> {
+  List<Map<String, dynamic>> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('mission_pool').select().order('created_at');
+      if (!mounted) return;
+      setState(() {
+        _rows = List<Map<String, dynamic>>.from(r);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _edit([Map<String, dynamic>? m]) async {
+    final title = TextEditingController(text: (m?['title'] ?? '') as String);
+    final target = TextEditingController(text: m == null ? '' : '${m['target']}');
+    final reward = TextEditingController(text: m == null ? '' : '${m['reward']}');
+    var kind = (m?['kind'] ?? 'room_visit') as String;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, setS) => AlertDialog(
+          title: Text(m == null ? 'مهمة جديدة' : 'تعديل المهمة'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: title, decoration: const InputDecoration(labelText: 'نص المهمة')),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: kind,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'نوع المهمة'),
+                items: [for (final e in _missionKinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => setS(() => kind = v ?? kind),
+              ),
+              const SizedBox(height: 8),
+              TextField(controller: target, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المطلوب (عدد)')),
+              const SizedBox(height: 8),
+              TextField(controller: reward, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المكافأة بالجواهر')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حفظ')),
+          ],
+        ),
+      ),
+    );
+    final t = int.tryParse(target.text.trim());
+    final r = int.tryParse(reward.text.trim());
+    if (ok != true || title.text.trim().length < 2 || t == null || r == null || t < 1 || r < 1) return;
+    try {
+      final vals = {'title': title.text.trim(), 'kind': kind, 'target': t, 'reward': r};
+      if (m == null) {
+        await supa.from('mission_pool').insert(vals);
+      } else {
+        await supa.from('mission_pool').update(vals).eq('id', m['id']);
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _toggle(Map<String, dynamic> m, bool v) async {
+    try {
+      await supa.from('mission_pool').update({'active': v}).eq('id', m['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> m) async {
+    try {
+      await supa.from('mission_pool').delete().eq('id', m['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Text('تختار التطبيق 3 مهام من الفعّالة كل يوم (بتوقيت بغداد) تتبدّل تلقائياً. أضف أكثر من 3 ليتنوّع اليوم.',
+          style: TextStyle(color: Colors.white60, fontSize: 12)),
+      const SizedBox(height: 10),
+      GradButton(label: 'إضافة مهمة', icon: Icons.add_rounded, dense: true, onPressed: () => _edit()),
+      const SizedBox(height: 12),
+      for (final m in _rows)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(m['title'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text('${_missionKinds[m['kind']] ?? m['kind']} · المطلوب ${m['target']} · المكافأة ${m['reward']} 💎',
+                      style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                ]),
+              ),
+              Switch(value: m['active'] == true, onChanged: (v) => _toggle(m, v)),
+              IconButton(onPressed: () => _edit(m), icon: const Icon(Icons.edit_rounded, size: 20)),
+              IconButton(onPressed: () => _delete(m), icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFFF8A8A))),
+            ]),
+          ),
+        ),
+    ]);
   }
 }

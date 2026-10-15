@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'main.dart';
 import 'shop_screen.dart';
+import 'theme.dart';
 
 /// أرقام الوحدات الإعلانية. الحالية «تجريبية» رسمية من Google:
 /// بدّلها بأرقامك من AdMob قبل النشر على Google Play.
@@ -11,6 +14,8 @@ const _testBanner = 'ca-app-pub-3940256099942544/6300978111';
 const _testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
 const String bannerUnitId = _testBanner; // ← games_banner
 const String interstitialUnitId = _testInterstitial; // ← round_end
+const _testRewarded = 'ca-app-pub-3940256099942544/5224354917';
+const String rewardedUnitId = _testRewarded; // ← rewards
 
 bool _ready = false;
 bool? _adsFree;
@@ -129,4 +134,47 @@ class _AdBannerState extends State<AdBanner> {
       ),
     );
   }
+}
+
+/// إعلان مكافئ: يرجع true عند اكتمال المشاهدة (أو فوراً لمن اشترى «بدون إعلانات»).
+Future<bool> watchRewardedAd(BuildContext context) async {
+  if (await adsFree(refresh: true)) {
+    supa.rpc('log_ad_view').catchError((_) => null);
+    return true;
+  }
+  if (!_ready) {
+    if (context.mounted) toast(context, 'الإعلانات غير متاحة الآن');
+    return false;
+  }
+  final done = Completer<bool>();
+  var earned = false;
+  RewardedAd.load(
+    adUnitId: rewardedUnitId,
+    request: const AdRequest(),
+    rewardedAdLoadCallback: RewardedAdLoadCallback(
+      onAdLoaded: (ad) {
+        ad.fullScreenContentCallback = FullScreenContentCallback(
+          onAdDismissedFullScreenContent: (a) {
+            a.dispose();
+            if (!done.isCompleted) done.complete(earned);
+          },
+          onAdFailedToShowFullScreenContent: (a, _) {
+            a.dispose();
+            if (!done.isCompleted) done.complete(false);
+          },
+        );
+        ad.show(onUserEarnedReward: (_, __) => earned = true);
+      },
+      onAdFailedToLoad: (_) {
+        if (!done.isCompleted) done.complete(false);
+      },
+    ),
+  );
+  final ok = await done.future.timeout(const Duration(seconds: 60), onTimeout: () => false);
+  if (ok) {
+    supa.rpc('log_ad_view').catchError((_) => null);
+  } else if (context.mounted) {
+    toast(context, 'لم يكتمل الإعلان أو غير متوفر الآن، حاول لاحقاً');
+  }
+  return ok;
 }

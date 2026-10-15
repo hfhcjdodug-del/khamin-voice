@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../ads.dart';
 import '../main.dart';
+import 'rewards_screen.dart';
 import '../shop_screen.dart';
 import '../theme.dart';
 import 'guess_lobby_screen.dart';
@@ -159,6 +160,28 @@ class _GamesTabState extends State<GamesTab> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
           const AdsPromo(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RewardsScreen())),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEC4899)]),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Row(children: const [
+                  Text('🎁', style: TextStyle(fontSize: 26)),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text('مكافآت مجانية: هدية يومية + عجلة الحظ + مهام',
+                        style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                  Icon(Icons.chevron_left_rounded),
+                ]),
+              ),
+            ),
+          ),
           const AdBanner(),
           for (final inv in _invites)
             Padding(

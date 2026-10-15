@@ -108,7 +108,7 @@ class _ShopScreenState extends State<ShopScreen> {
   bool _adsFree = false;
   int _xp = 0;
   int _nextCost = 0;
-  int _adsPrice = 3000;
+  int _adsPrice = 10000;
   String _payAsia = '';
   String _payAtheer = '';
   List<Map<String, dynamic>> _pkgs = [];
@@ -142,7 +142,7 @@ class _ShopScreenState extends State<ShopScreen> {
         final v = (x['value'] ?? '') as String;
         if (x['key'] == 'pay_asiacell') _payAsia = v;
         if (x['key'] == 'pay_atheer') _payAtheer = v;
-        if (x['key'] == 'ads_free_price') _adsPrice = int.tryParse(v) ?? 3000;
+        if (x['key'] == 'ads_free_price') _adsPrice = int.tryParse(v) ?? 10000;
       }
       if (!mounted) return;
       setState(() {
