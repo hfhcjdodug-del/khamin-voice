@@ -218,6 +218,9 @@ String friendlyError(Object e) {
   final s = e.toString();
   if (s.contains('seat taken')) return 'المقعد محجوز';
   if (s.contains('host only')) return 'هذا المقعد للمضيف فقط';
+  if (s.contains('kicked')) return 'تم طردك من هذه الغرفة';
+  if (s.contains('owner only')) return 'هذا الإجراء لصاحب الغرفة فقط';
+  if (s.contains('not allowed')) return 'لا تملك صلاحية على هذا المستخدم';
   if (s.contains('duplicate key') || s.contains('username_key')) return 'اليوزر مستخدم، جرّب غيره';
   if (s.contains('username_fmt')) return 'اليوزر: 3-20 حرفاً إنكليزياً أو أرقاماً أو _';
   if (s.contains('SocketException') || s.contains('ClientException')) return 'تحقق من اتصال الإنترنت';

@@ -6,6 +6,7 @@ import '../main.dart';
 import '../theme.dart';
 import 'admin_screen.dart';
 import 'challenge.dart';
+import 'follows_screen.dart';
 import 'challenges_screen.dart';
 import 'chat_screen.dart';
 import 'profile_actions.dart';
@@ -25,6 +26,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _p;
   bool _loading = true;
   bool _viewerAdmin = false;
+  int _tab = 0; // 0 الملف الشخصي، 1 الشرف، 2 المنشورات، 3 العائلة
 
   bool get _isMe => widget.userId == myId;
 
@@ -76,6 +78,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await supa.rpc('admin_set_verified',
           params: {'p_id': p['id'], 'p_v': !(p['verified'] == true)});
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _vip(int days) async {
+    try {
+      await supa.rpc('admin_set_vip', params: {'p_id': _p!['id'], 'p_days': days});
       await _load();
     } catch (e) {
       if (mounted) toast(context, friendlyError(e));
@@ -188,88 +199,338 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
       );
 
-  Widget _stat(IconData icon, Color c, String label, Object v, {VoidCallback? onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: C.glass,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: C.glassBorder),
-          ),
+
+  Widget _count(String label, Object v, VoidCallback? onTap) => Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
           child: Column(children: [
-            Icon(icon, color: c, size: 20),
-            const SizedBox(height: 2),
             Text('$v', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
             Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
           ]),
         ),
+      );
+
+  void _openFollows(bool followers) => Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => FollowsScreen(userId: widget.userId, followers: followers)));
+
+  Widget _counts(Map<String, dynamic> p) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: C.glass,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: C.glassBorder),
       ),
+      child: Row(children: [
+        _count('المتابعون', p['followers'], () => _openFollows(true)),
+        Container(width: 1, height: 32, color: Colors.white12),
+        _count('يتابعهم', p['following'], () => _openFollows(false)),
+        Container(width: 1, height: 32, color: Colors.white12),
+        _count(
+            'الزوار',
+            p['visits'],
+            _isMe
+                ? () => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => const VisitorsScreen()))
+                : null),
+      ]),
     );
   }
 
-  Widget _levelCard() {
+  /// بطاقة الألقاب: صف واحد قابل للسحب، أصغر لقب إلى أعلى لقب وصل إليه.
+  Widget _titlesCard(int lv) {
+    final top = titleIndex(lv);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: C.glass,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: C.glassBorder),
+      ),
+      child: Column(children: [
+        Row(children: [
+          const Icon(Icons.workspace_premium_rounded, size: 16, color: C.violet),
+          const SizedBox(width: 6),
+          const Text('الألقاب والشارات',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: BoxDecoration(
+              gradient: brandGradient,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('المستوى $lv',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 62,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: top + 1,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (_, i) => TitleImage(level: (top - i) * 2 + 1, height: 62),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _tabs() {
+    const labels = ['الملف الشخصي', 'الشرف', 'المنشورات', 'العائلة'];
+    const icons = [
+      Icons.person_rounded,
+      Icons.shield_rounded,
+      Icons.chat_bubble_rounded,
+      Icons.groups_rounded,
+    ];
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: C.glass,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: C.glassBorder),
+      ),
+      child: Row(children: [
+        for (var i = 0; i < 4; i++)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _tab = i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: _tab == i ? brandGradient : null,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(children: [
+                  Icon(icons[i], size: 18, color: _tab == i ? Colors.white : Colors.white54),
+                  const SizedBox(height: 2),
+                  Text(labels[i],
+                      maxLines: 1,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _tab == i ? Colors.white : Colors.white54)),
+                ]),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Widget _soon(String t) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(children: [
+          const Icon(Icons.hourglass_empty_rounded, size: 46, color: Colors.white30),
+          const SizedBox(height: 10),
+          Text('$t — قريباً', style: const TextStyle(color: Colors.white54, fontSize: 16)),
+        ]),
+      );
+
+  Widget _infoCell(IconData i, String label, String v) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: C.glass,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: C.glassBorder),
+        ),
+        child: Row(children: [
+          Icon(i, size: 18, color: C.violet),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              Text(v.isEmpty ? '—' : v,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+            ]),
+          ),
+        ]),
+      );
+
+  Widget _infoGrid(Map<String, dynamic> p) {
+    final age = p['age'];
+    final cells = [
+      _infoCell(Icons.flag_rounded, 'الجنسية', (p['nationality'] ?? '') as String),
+      _infoCell(Icons.cake_rounded, 'العمر', age == null ? '' : '$age'),
+      _infoCell(Icons.place_rounded, 'المنطقة', (p['region'] ?? '') as String),
+      _infoCell(Icons.wc_rounded, 'الجنس', (p['gender'] ?? '') as String),
+      _infoCell(Icons.translate_rounded, 'اللغة', (p['language'] ?? '') as String),
+      _infoCell(Icons.favorite_rounded, 'الحالة', (p['marital'] ?? '') as String),
+    ];
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 2.9,
+      children: cells,
+    );
+  }
+
+  Widget _profileTab(Map<String, dynamic> p) {
+    final bio = ((p['bio'] ?? '') as String);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      GlassCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: const [
+            Icon(Icons.workspace_premium_rounded, color: C.violet, size: 18),
+            SizedBox(width: 6),
+            Text('نبذة عني', style: TextStyle(fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 8),
+          Text(bio.isEmpty ? (_isMe ? 'أضف نبذة من «تعديل الملف الشخصي»' : 'لا توجد نبذة') : bio,
+              style: const TextStyle(color: Colors.white70, height: 1.5)),
+        ]),
+      ),
+      const SizedBox(height: 10),
+      _infoGrid(p),
+      const SizedBox(height: 10),
+      _aboutCard(p),
+      const SizedBox(height: 10),
+      if (_isMe) ...[
+        _tile(Icons.edit_rounded, const [C.violet, Color(0xFF6D4AFF)], 'تعديل الملف الشخصي',
+            'إدارة معلوماتك وصورتك', _edit),
+        _tile(Icons.flag_rounded, const [Color(0xFF6366F1), C.cyan], 'لوحة التحديات',
+            'أكمل المهام اليومية',
+            () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => ChallengesScreen(profile: p)))),
+        if (_viewerAdmin)
+          _tile(Icons.admin_panel_settings_rounded, const [Color(0xFFEF4444), C.orange],
+              'لوحة المدير', 'إحصائيات وأدوات الإدارة',
+              () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => const AdminScreen()))),
+      ],
+    ]);
+  }
+
+  Widget _vipCard(Map<String, dynamic> p) {
+    final st = vipState(p);
+    final gold = const [Color(0xFFFBBF24), Color(0xFFF97316)];
+    String title, sub;
+    if (st == 'active') {
+      title = 'عضو VIP';
+      sub = 'من ${fmtDate(p['vip_start'])} · ينتهي ${fmtDate(p['vip_end'])} (باقي ${vipDaysLeft(p)} يوم)';
+    } else if (st == 'former') {
+      title = 'VIP سابق';
+      sub = 'كان VIP من ${fmtDate(p['vip_start'])} حتى ${fmtDate(p['vip_end'])}';
+    } else {
+      title = 'بدون VIP';
+      sub = 'لم يشترك بعد';
+    }
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: st == 'active' ? LinearGradient(colors: gold) : null,
+        color: st == 'active' ? null : C.glass,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: st == 'active' ? Colors.white54 : C.glassBorder),
+      ),
+      child: Row(children: [
+        Icon(Icons.diamond_rounded,
+            color: st == 'active' ? Colors.white : (st == 'former' ? C.orange : Colors.white30),
+            size: 30),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            Text(sub,
+                style: TextStyle(
+                    fontSize: 12, color: st == 'active' ? Colors.white : Colors.white60)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _honorTab(Map<String, dynamic> p) {
     final xp = _n('xp');
     final lv = levelOf(xp);
-    final tier = tierOf(lv);
     final base = levelBase(lv);
     final next = levelNext(lv);
     final prog = ((xp - base) / (next - base)).clamp(0.0, 1.0);
-    return GlassCard(
-      padding: const EdgeInsets.all(14),
-      child: Row(children: [
-        Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(colors: tier.colors),
-            boxShadow: [BoxShadow(color: tier.colors.first.withValues(alpha: 0.5), blurRadius: 16)],
-          ),
-          child: const Icon(Icons.workspace_premium_rounded, size: 30),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('المستوى ${tier.name}',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: prog,
-                minHeight: 7,
-                backgroundColor: Colors.white12,
-                valueColor: const AlwaysStoppedAnimation(C.violet),
+    final top = titleIndex(lv);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      GlassCard(
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          LevelBadge(level: lv, size: 74),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('المستوى $lv',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w900, fontSize: 22, color: Color(0xFFFDE68A))),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: prog,
+                  minHeight: 7,
+                  backgroundColor: Colors.white12,
+                  valueColor: const AlwaysStoppedAnimation(C.pink),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text('$xp / $next نقطة',
-                style: const TextStyle(color: Colors.white60, fontSize: 12)),
-          ]),
-        ),
-        const SizedBox(width: 12),
-        Column(children: [
-          Text('$lv', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-          const Text('مستوى', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              const SizedBox(height: 4),
+              Text('$xp / $next نقطة',
+                  style: const TextStyle(color: Colors.white60, fontSize: 12)),
+            ]),
+          ),
         ]),
+      ),
+      const SizedBox(height: 10),
+      _vipCard(p),
+      const SizedBox(height: 14),
+      const Text('لقبي الحالي', style: TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 6),
+      Center(child: TitleImage(level: lv, height: 96)),
+      const SizedBox(height: 14),
+      const Text('جميع الألقاب', style: TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      GridView.count(
+        crossAxisCount: 4,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        children: [
+          for (var i = 0; i < titleNames.length; i++)
+            Opacity(
+              opacity: i <= top ? 1 : 0.25,
+              child: TitleImage(level: i * 2 + 1, height: 80),
+            ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      const Text('الإنجازات', style: TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 10, runSpacing: 12, children: [
+        for (final a in achievements) AchBadge(a: a, earned: a.test(p), size: 52),
       ]),
-    );
-  }
-
-  Widget _badgesRow(Map<String, dynamic> p) {
-    final earned = achievements.where((a) => a.test(p)).toList();
-    final rest = achievements.where((a) => !a.test(p)).toList();
-    final show = [...earned, ...rest].take(4).toList();
-    return GestureDetector(
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => AchievementsScreen(profile: p))),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-        for (final a in show) AchBadge(a: a, earned: a.test(p), size: 50),
-      ]),
-    );
+      const SizedBox(height: 14),
+      const Text('المستويات', style: TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      GridView.count(
+        crossAxisCount: 5,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        children: [
+          for (var l = 1; l <= 50; l++)
+            Opacity(opacity: l <= lv ? 1 : 0.25, child: LevelBadge(level: l, size: 56)),
+        ],
+      ),
+    ]);
   }
 
   Widget _tile(IconData icon, List<Color> colors, String title, String sub, VoidCallback onTap) {
@@ -335,6 +596,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _actions(Map<String, dynamic> p) {
+    return Column(children: [
+      GradButton(
+        label: p['is_following'] == true ? 'إلغاء المتابعة' : 'متابعة',
+        icon: p['is_following'] == true ? Icons.person_remove_rounded : Icons.person_add_rounded,
+        outlined: p['is_following'] == true,
+        onPressed: _toggleFollow,
+      ),
+      const SizedBox(height: 10),
+      GradButton(
+        label: 'إرسال رسالة',
+        icon: Icons.chat_bubble_rounded,
+        outlined: true,
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              peerId: p['id'] as String,
+              peerName: p['name'] as String,
+              peerAvatar: p['avatar_url'] as String?,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      GradButton(
+        label: 'تحدّي / مشاهدة فيلم',
+        icon: Icons.sports_esports_rounded,
+        outlined: true,
+        onPressed: () =>
+            showFriendActions(context, peerId: p['id'] as String, peerName: p['name'] as String),
+      ),
+      if (_viewerAdmin) ...[
+        const SizedBox(height: 10),
+        GradButton(
+          label: p['verified'] == true ? 'إلغاء التوثيق' : 'توثيق الحساب',
+          icon: Icons.verified_rounded,
+          outlined: true,
+          onPressed: _toggleVerified,
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: GradButton(
+                label: 'VIP 30 يوم', icon: Icons.diamond_rounded, dense: true,
+                onPressed: () => _vip(30)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: GradButton(
+                label: 'إنهاء VIP', outlined: true, dense: true, onPressed: () => _vip(0)),
+          ),
+        ]),
+      ],
+      const SizedBox(height: 10),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = _p;
@@ -356,24 +675,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           right: 0,
                           child: Center(
                             child: Stack(children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: const LinearGradient(colors: [C.violet, C.pink, C.cyan]),
-                                  boxShadow: [
-                                    BoxShadow(color: C.violet.withValues(alpha: 0.7), blurRadius: 34),
-                                  ],
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(shape: BoxShape.circle, color: C.bg1),
-                                  child: Avatar(
-                                      name: p['name'] as String,
-                                      url: p['avatar_url'] as String?,
-                                      size: 110),
-                                ),
-                              ),
+                              Avatar(
+                                  name: p['name'] as String,
+                                  url: p['avatar_url'] as String?,
+                                  size: 112),
                               if (_isMe)
                                 Positioned(
                                   bottom: 4,
@@ -395,7 +700,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       ]),
-                      const SizedBox(height: 62),
+                      const SizedBox(height: 10),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(children: [
@@ -410,6 +715,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(width: 6),
                               const Icon(Icons.verified_rounded, color: Color(0xFF4DA3FF), size: 24),
                             ],
+                            if (vipState(p) == 'active') ...[
+                              const SizedBox(width: 6),
+                              const Icon(Icons.diamond_rounded, color: Color(0xFFFBBF24), size: 22),
+                            ],
                           ]),
                           const SizedBox(height: 6),
                           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -417,126 +726,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             const SizedBox(width: 8),
                             _chip('ID ${p['num']}', C.orange),
                           ]),
-                          if (((p['bio'] ?? '') as String).isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              const Icon(Icons.graphic_eq_rounded, color: C.violet, size: 18),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(p['bio'] as String,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.white70, fontSize: 15)),
-                              ),
-                            ]),
-                          ],
-                          const SizedBox(height: 18),
-                          _levelCard(),
+                          const SizedBox(height: 14),
+                          _counts(p),
+                          const SizedBox(height: 10),
+                          _titlesCard(levelOf(_n('xp'))),
+                          const SizedBox(height: 10),
+                          if (!_isMe) _actions(p),
+                          _tabs(),
                           const SizedBox(height: 12),
-                          Row(children: [
-                            _stat(Icons.person_rounded, C.cyan, 'يتابعون', p['following']),
-                            const SizedBox(width: 10),
-                            _stat(Icons.local_fire_department_rounded, C.orange, 'زوار', p['visits'],
-                                onTap: _isMe
-                                    ? () => Navigator.push(context,
-                                        MaterialPageRoute(builder: (_) => const VisitorsScreen()))
-                                    : null),
-                            const SizedBox(width: 10),
-                            _stat(Icons.groups_rounded, C.violet, 'متابعين', p['followers']),
-                          ]),
-                          const SizedBox(height: 16),
-                          _badgesRow(p),
-                          const SizedBox(height: 16),
-                          if (_isMe) ...[
-                            _tile(Icons.edit_rounded, const [C.violet, Color(0xFF6D4AFF)],
-                                'تعديل الملف الشخصي', 'إدارة معلوماتك وصورتك', _edit),
-                            _tile(
-                              Icons.flag_rounded,
-                              const [Color(0xFF6366F1), C.cyan],
-                              'لوحة التحديات',
-                              'أكمل المهام اليومية',
-                              () => Navigator.push(
-                                  context, MaterialPageRoute(builder: (_) => ChallengesScreen(profile: p))),
+                          Align(
+                            alignment: AlignmentDirectional.topStart,
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: switch (_tab) {
+                                0 => _profileTab(p),
+                                1 => _honorTab(p),
+                                2 => _soon('المنشورات'),
+                                _ => _soon('العائلة'),
+                              },
                             ),
-                            _tile(
-                              Icons.emoji_events_rounded,
-                              const [C.orange, C.pink],
-                              'الإنجازات',
-                              'شاراتك ونجومك في التطبيق',
-                              () => Navigator.push(
-                                  context, MaterialPageRoute(builder: (_) => AchievementsScreen(profile: p))),
-                            ),
-                            if (_viewerAdmin)
-                              _tile(
-                                Icons.admin_panel_settings_rounded,
-                                const [Color(0xFFEF4444), C.orange],
-                                'لوحة المدير',
-                                'إحصائيات وأدوات الإدارة',
-                                () => Navigator.push(
-                                    context, MaterialPageRoute(builder: (_) => const AdminScreen())),
-                              ),
-                          ] else ...[
-                            GradButton(
-                              label: p['is_following'] == true ? 'إلغاء المتابعة' : 'متابعة',
-                              icon: p['is_following'] == true
-                                  ? Icons.person_remove_rounded
-                                  : Icons.person_add_rounded,
-                              outlined: p['is_following'] == true,
-                              onPressed: _toggleFollow,
-                            ),
-                            const SizedBox(height: 12),
-                            GradButton(
-                              label: 'إرسال رسالة',
-                              icon: Icons.chat_bubble_rounded,
-                              outlined: true,
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChatScreen(
-                                    peerId: p['id'] as String,
-                                    peerName: p['name'] as String,
-                                    peerAvatar: p['avatar_url'] as String?,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            GradButton(
-                              label: 'تحدّي / مشاهدة فيلم',
-                              icon: Icons.sports_esports_rounded,
-                              outlined: true,
-                              onPressed: () => showFriendActions(context,
-                                  peerId: p['id'] as String, peerName: p['name'] as String),
-                            ),
-                            if (_viewerAdmin) ...[
-                              const SizedBox(height: 12),
-                              GradButton(
-                                label: p['verified'] == true ? 'إلغاء التوثيق' : 'توثيق الحساب',
-                                icon: Icons.verified_rounded,
-                                outlined: true,
-                                onPressed: _toggleVerified,
-                              ),
-                            ],
-                            const SizedBox(height: 10),
-                          ],
-                          _aboutCard(p),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1B1F6B), Color(0xFF5B21B6)],
-                              ),
-                            ),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: const [
-                              Text('كن دائماً كما أنت',
-                                  style: TextStyle(
-                                      color: Color(0xFFFBBF24), fontWeight: FontWeight.w900, fontSize: 17)),
-                              SizedBox(height: 4),
-                              Text('فأنت مميز بطريقتك الخاصة',
-                                  style: TextStyle(color: Colors.white70, fontSize: 13)),
-                            ]),
                           ),
                           const SizedBox(height: 12),
                           SizedBox(

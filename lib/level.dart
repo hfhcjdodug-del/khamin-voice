@@ -109,3 +109,71 @@ String timeAgo(DateTime t) {
   if (d.inHours < 24) return 'منذ ${d.inHours} ساعة';
   return 'منذ ${d.inDays} يوم';
 }
+
+// ---------- الألقاب والشارات والـ VIP ----------
+
+const titleNames = [
+  'المبتدئ', 'الحالم', 'المستكشف', 'المحارب الصامت', 'الأسطورة الأولى',
+  'صديق الجميع', 'المغامر', 'الذئب الأزرق', 'المتميز', 'قمة البداية',
+  'النجم', 'الفرسان', 'صانع المجد', 'المدافع', 'سيد المجال',
+  'الملك', 'القائد', 'الأسطوري', 'الفاتح', 'الزعيم',
+  'الأسطورة', 'سيد الكون', 'المهيب', 'الخالد', 'الأسطورة المطلقة',
+];
+
+int _cl(int level) => level < 1 ? 1 : (level > 50 ? 50 : level);
+
+/// كل لقب يغطي مستويين: (1-2) المبتدئ، (3-4) الحالم ...
+int titleIndex(int level) => (_cl(level) - 1) ~/ 2;
+String titleName(int level) => titleNames[titleIndex(level)];
+
+/// شارة المستوى (حرّة بدون إطار مربع).
+class LevelBadge extends StatelessWidget {
+  final int level;
+  final double size;
+  const LevelBadge({super.key, required this.level, this.size = 28});
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        'assets/levels/${_cl(level)}.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
+      );
+}
+
+/// صورة اللقب (الاسم مكتوب داخل الصورة نفسها).
+class TitleImage extends StatelessWidget {
+  final int level;
+  final double height;
+  const TitleImage({super.key, required this.level, this.height = 28});
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        'assets/titles/${titleIndex(level) + 1}.png',
+        height: height,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Text(titleName(level),
+            style: TextStyle(fontSize: height * 0.4, color: Colors.white70)),
+      );
+}
+
+DateTime? _dt(Object? v) => v == null ? null : DateTime.tryParse(v.toString())?.toLocal();
+
+/// حالة الـ VIP: none | active | former
+String vipState(Map<String, dynamic> p) {
+  final end = _dt(p['vip_end']);
+  if (end == null) return 'none';
+  return end.isAfter(DateTime.now()) ? 'active' : 'former';
+}
+
+int vipDaysLeft(Map<String, dynamic> p) {
+  final end = _dt(p['vip_end']);
+  if (end == null) return 0;
+  return end.difference(DateTime.now()).inDays + 1;
+}
+
+String fmtDate(Object? v) {
+  final d = _dt(v);
+  return d == null ? '' : '${d.year}/${d.month}/${d.day}';
+}

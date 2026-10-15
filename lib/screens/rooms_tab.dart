@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../room_look.dart';
 import '../theme.dart';
 import 'room_screen.dart';
 
@@ -87,6 +88,7 @@ class _RoomsTabState extends State<RoomsTab> {
   bool _loading = true;
   String? _error;
   Timer? _timer;
+  String _filter = 'all'; // all | top | new | friends
 
   @override
   void initState() {
@@ -132,8 +134,45 @@ class _RoomsTabState extends State<RoomsTab> {
     if (mounted) _load(silent: true);
   }
 
+  List<Map<String, dynamic>> get _shown {
+    final l = List<Map<String, dynamic>>.of(_rooms);
+    int n(Map<String, dynamic> r, String k) => (r[k] as num?)?.toInt() ?? 0;
+    switch (_filter) {
+      case 'top':
+        l.sort((a, b) => n(b, 'listeners').compareTo(n(a, 'listeners')));
+      case 'new':
+        l.sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+      case 'friends':
+        l.removeWhere((r) => n(r, 'friends') == 0);
+    }
+    return l;
+  }
+
+  Widget _chipBtn(String id, String label) {
+    final on = _filter == id;
+    return GestureDetector(
+      onTap: () => setState(() => _filter = id),
+      child: Container(
+        margin: const EdgeInsetsDirectional.only(end: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        decoration: BoxDecoration(
+          gradient: on ? brandGradient : null,
+          color: on ? null : C.glass,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: on ? Colors.transparent : C.glassBorder),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: on ? Colors.white : Colors.white70)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final shown = _shown;
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -141,7 +180,7 @@ class _RoomsTabState extends State<RoomsTab> {
           child: CustomScrollView(slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
                 child: Row(children: [
                   const Icon(Icons.grid_view_rounded, color: C.violet),
                   const SizedBox(width: 10),
@@ -160,6 +199,21 @@ class _RoomsTabState extends State<RoomsTab> {
                 ]),
               ),
             ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 44,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _chipBtn('all', 'الكل'),
+                    _chipBtn('top', 'الأكثر استماعاً'),
+                    _chipBtn('new', 'الأحدث'),
+                    _chipBtn('friends', 'أصدقائي'),
+                  ],
+                ),
+              ),
+            ),
             if (_loading)
               const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: C.pink)))
             else if (_error != null)
@@ -169,32 +223,45 @@ class _RoomsTabState extends State<RoomsTab> {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                 sliver: SliverList.list(children: [
-                  if (_rooms.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 50),
+                  if (shown.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(children: [
-                        Icon(Icons.mic_none_rounded, size: 72, color: Colors.white38),
-                        SizedBox(height: 12),
-                        Text('لا توجد غرف مباشرة الآن\nكن أول من يبدأ غرفة!',
+                        const Icon(Icons.mic_none_rounded, size: 72, color: Colors.white38),
+                        const SizedBox(height: 12),
+                        Text(
+                            _filter == 'friends'
+                                ? 'لا يوجد أصدقاء لك داخل الغرف الآن'
+                                : 'لا توجد غرف مباشرة الآن\nكن أول من يبدأ غرفة!',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white60, fontSize: 17)),
+                            style: const TextStyle(color: Colors.white60, fontSize: 17)),
                       ]),
                     ),
-                  for (final r in _rooms)
+                  for (final r in shown)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: RoomCard(room: r, onTap: () => _open(r)),
                     ),
-                  const SizedBox(height: 4),
-                  GradButton(
-                    label: 'إنشاء غرفة',
-                    icon: Icons.add_rounded,
-                    onPressed: () async {
+                  GestureDetector(
+                    onTap: () async {
                       await createRoomFlow(context);
                       if (mounted) _load(silent: true);
                     },
+                    child: Container(
+                      height: 72,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: Colors.white30, width: 1.5),
+                      ),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                        Icon(Icons.add_circle_rounded, color: C.pink),
+                        SizedBox(width: 10),
+                        Text('ابدأ غرفتك الآن',
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                      ]),
+                    ),
                   ),
                 ]),
               ),
@@ -205,14 +272,6 @@ class _RoomsTabState extends State<RoomsTab> {
   }
 }
 
-const _roomPalettes = [
-  [Color(0xFF1E1B4B), Color(0xFF6D28D9)],
-  [Color(0xFF0F172A), Color(0xFF0E7490)],
-  [Color(0xFF3B0764), Color(0xFFBE185D)],
-  [Color(0xFF172554), Color(0xFF4338CA)],
-  [Color(0xFF1F2937), Color(0xFF7C3AED)],
-];
-
 class RoomCard extends StatelessWidget {
   final Map<String, dynamic> room;
   final VoidCallback onTap;
@@ -222,86 +281,94 @@ class RoomCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = room['title'] as String;
     final topic = (room['topic'] ?? '') as String;
-    final pal = _roomPalettes[title.runes.fold<int>(0, (a, b) => a + b) % _roomPalettes.length];
+    final seated = (room['seated'] as num?)?.toInt() ?? 0;
+    final friends = (room['friends'] as num?)?.toInt() ?? 0;
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 128,
+        height: 142,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(colors: pal, begin: Alignment.topRight, end: Alignment.bottomLeft),
           border: Border.all(color: C.violet.withValues(alpha: 0.45)),
           boxShadow: [BoxShadow(color: C.violet.withValues(alpha: 0.18), blurRadius: 18)],
         ),
-        child: Stack(children: [
-          Positioned(
-            top: -20,
-            left: -20,
-            child: Container(
-              width: 110,
-              height: 110,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.07),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(
-                  child: Text(title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.black38,
-                    borderRadius: BorderRadius.circular(12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(21),
+          child: Stack(fit: StackFit.expand, children: [
+            RoomBackground(
+                preset: room['bg_preset'] as String?, url: room['bg_url'] as String?, dim: 0.15),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Avatar(
+                      name: (room['host_name'] ?? '?') as String,
+                      url: room['host_avatar'] as String?,
+                      size: 36),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                      Text(
+                          topic.isEmpty
+                              ? 'المضيف: ${room['host_name']}'
+                              : '$topic · ${room['host_name']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    ]),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                    Icon(Icons.graphic_eq_rounded, size: 13, color: C.green),
-                    SizedBox(width: 4),
-                    Text('الآن', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-              ]),
-              const SizedBox(height: 2),
-              Text(topic.isEmpty ? 'المضيف: ${room['host_name']}' : '$topic · ${room['host_name']}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
-              const Spacer(),
-              Row(children: [
-                Avatar(
-                    name: (room['host_name'] ?? '?') as String,
-                    url: room['host_avatar'] as String?,
-                    size: 28),
-                const SizedBox(width: 8),
-                const Icon(Icons.people_alt_rounded, size: 16, color: Colors.white70),
-                const SizedBox(width: 4),
-                Text('${room['listeners']}',
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(width: 10),
-                const Icon(Icons.mic_rounded, size: 15, color: C.pink),
-                Text(' ${room['seated']}/9',
-                    style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black38,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: const [
+                      Icon(Icons.graphic_eq_rounded, size: 13, color: C.green),
+                      SizedBox(width: 4),
+                      Text('الآن', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                ]),
                 const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 7),
-                  decoration: BoxDecoration(
-                    gradient: brandGradient,
-                    borderRadius: BorderRadius.circular(18),
+                Row(children: [
+                  for (var i = 0; i < 9; i++)
+                    Container(
+                      width: 9,
+                      height: 9,
+                      margin: const EdgeInsetsDirectional.only(end: 4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i < seated ? C.pink : Colors.white24,
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.people_alt_rounded, size: 16, color: Colors.white70),
+                  const SizedBox(width: 4),
+                  Text('${room['listeners']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  if (friends > 0) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.favorite_rounded, size: 14, color: C.pink),
+                    Text(' $friends', style: const TextStyle(fontSize: 12)),
+                  ],
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 7),
+                    decoration: BoxDecoration(
+                      gradient: brandGradient,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Text('انضم', style: TextStyle(fontWeight: FontWeight.w800)),
                   ),
-                  child: const Text('انضم', style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
+                ]),
               ]),
-            ]),
-          ),
-        ]),
+            ),
+          ]),
+        ),
       ),
     );
   }

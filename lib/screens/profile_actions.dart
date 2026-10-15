@@ -44,6 +44,12 @@ Future<bool> showEditProfile(BuildContext context, Map<String, dynamic> p) async
   final user = TextEditingController(text: p['username'] as String);
   final bio = TextEditingController(text: (p['bio'] ?? '') as String);
   final interests = TextEditingController(text: (p['interests'] ?? '') as String);
+  final nat = TextEditingController(text: (p['nationality'] ?? '') as String);
+  final age = TextEditingController(text: p['age'] == null ? '' : '${p['age']}');
+  final region = TextEditingController(text: (p['region'] ?? '') as String);
+  final gender = TextEditingController(text: (p['gender'] ?? '') as String);
+  final lang = TextEditingController(text: (p['language'] ?? '') as String);
+  final marital = TextEditingController(text: (p['marital'] ?? '') as String);
   final hobbies = <String>{...((p['hobbies'] ?? []) as List).cast<String>()};
   final ok = await showModalBottomSheet<bool>(
     context: context,
@@ -71,6 +77,49 @@ Future<bool> showEditProfile(BuildContext context, Map<String, dynamic> p) async
                 maxLength: 150,
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'نبذة عنك')),
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                      controller: nat,
+                      maxLength: 30,
+                      decoration: const InputDecoration(labelText: 'الجنسية', counterText: ''))),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: TextField(
+                      controller: age,
+                      maxLength: 2,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'العمر', counterText: ''))),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                      controller: region,
+                      maxLength: 30,
+                      decoration: const InputDecoration(labelText: 'المنطقة', counterText: ''))),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: TextField(
+                      controller: gender,
+                      maxLength: 20,
+                      decoration: const InputDecoration(labelText: 'الجنس', counterText: ''))),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                      controller: lang,
+                      maxLength: 30,
+                      decoration: const InputDecoration(labelText: 'اللغة', counterText: ''))),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: TextField(
+                      controller: marital,
+                      maxLength: 20,
+                      decoration:
+                          const InputDecoration(labelText: 'الحالة الاجتماعية', counterText: ''))),
+            ]),
             const SizedBox(height: 8),
             const Align(
               alignment: AlignmentDirectional.centerStart,
@@ -109,8 +158,19 @@ Future<bool> showEditProfile(BuildContext context, Map<String, dynamic> p) async
     if (context.mounted) toast(context, 'الاسم قصير');
     return false;
   }
+  final ageN = int.tryParse(age.text.trim());
+  if (ageN != null && (ageN < 13 || ageN > 99)) {
+    if (context.mounted) toast(context, 'العمر يجب أن يكون بين 13 و 99');
+    return false;
+  }
   try {
     await supa.from('profiles').update({
+      'nationality': nat.text.trim(),
+      'age': ageN,
+      'region': region.text.trim(),
+      'gender': gender.text.trim(),
+      'language': lang.text.trim(),
+      'marital': marital.text.trim(),
       'name': n,
       'username': user.text.trim(),
       'bio': bio.text.trim(),
