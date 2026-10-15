@@ -50,7 +50,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 7,
+      length: 9,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -65,6 +65,8 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'الغرف'),
               Tab(text: 'إشعارات'),
               Tab(text: 'مستخدمون'),
+              Tab(text: 'المدفوعات'),
+              Tab(text: 'الهدايا'),
             ],
           ),
         ),
@@ -76,6 +78,8 @@ class AdminScreen extends StatelessWidget {
           _RoomsTab(),
           _NoticesAdminTab(),
           _UsersAdminTab(),
+          _PaymentsAdminTab(),
+          _GiftsAdminTab(),
         ]),
       ),
     );
@@ -1366,6 +1370,7 @@ class _UsersAdminTab extends StatefulWidget {
 class _UsersAdminTabState extends State<_UsersAdminTab> {
   final _q = TextEditingController();
   final _lvl = TextEditingController();
+  final _gem = TextEditingController();
   Map<String, dynamic>? _u;
   bool _busy = false;
 
@@ -1373,6 +1378,7 @@ class _UsersAdminTabState extends State<_UsersAdminTab> {
   void dispose() {
     _q.dispose();
     _lvl.dispose();
+    _gem.dispose();
     super.dispose();
   }
 
@@ -1405,6 +1411,21 @@ class _UsersAdminTabState extends State<_UsersAdminTab> {
       await supa.rpc('admin_set_level', params: {'p_id': _u!['id'], 'p_level': l});
       await _find();
       if (mounted) toast(context, 'تم ضبط المستوى على $l');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _grantGems() async {
+    final a = int.tryParse(_gem.text.trim());
+    if (_u == null || a == null || a == 0) {
+      toast(context, 'اكتب عدد الجواهر (سالب للخصم)');
+      return;
+    }
+    try {
+      await supa.rpc('admin_grant_gems', params: {'p_user': _u!['id'], 'p_amount': a});
+      if (mounted) toast(context, 'تم تعديل الجواهر بمقدار $a');
+      _gem.clear();
     } catch (e) {
       if (mounted) toast(context, friendlyError(e));
     }
@@ -1445,7 +1466,325 @@ class _UsersAdminTabState extends State<_UsersAdminTab> {
         ),
         const SizedBox(height: 12),
         GradButton(label: 'تطبيق المستوى', icon: Icons.trending_up_rounded, onPressed: _setLevel),
+        const Divider(height: 32, color: Colors.white12),
+        TextField(
+          controller: _gem,
+          keyboardType: const TextInputType.numberWithOptions(signed: true),
+          decoration: const InputDecoration(labelText: 'إضافة جواهر 💎 (سالب للخصم)'),
+        ),
+        const SizedBox(height: 12),
+        GradButton(label: 'تطبيق الجواهر', icon: Icons.diamond_rounded, onPressed: _grantGems),
       ],
     ]);
+  }
+}
+
+
+// ============================ المدفوعات ============================
+class _PaymentsAdminTab extends StatefulWidget {
+  const _PaymentsAdminTab();
+
+  @override
+  State<_PaymentsAdminTab> createState() => _PaymentsAdminTabState();
+}
+
+class _PaymentsAdminTabState extends State<_PaymentsAdminTab> {
+  final _asia = TextEditingController();
+  final _atheer = TextEditingController();
+  final _adsPrice = TextEditingController();
+  List<Map<String, dynamic>> _pending = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _asia.dispose();
+    _atheer.dispose();
+    _adsPrice.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final st = await supa
+          .from('app_settings')
+          .select()
+          .inFilter('key', ['pay_asiacell', 'pay_atheer', 'ads_free_price']);
+      for (final x in st) {
+        final v = (x['value'] ?? '') as String;
+        if (x['key'] == 'pay_asiacell') _asia.text = v;
+        if (x['key'] == 'pay_atheer') _atheer.text = v;
+        if (x['key'] == 'ads_free_price') _adsPrice.text = v;
+      }
+      final r = await supa.rpc('admin_topups', params: {'p_status': 'pending'});
+      if (!mounted) return;
+      setState(() {
+        _pending = List<Map<String, dynamic>>.from(r as List);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    try {
+      await _setSetting('pay_asiacell', _asia.text.trim());
+      await _setSetting('pay_atheer', _atheer.text.trim());
+      final p = int.tryParse(_adsPrice.text.trim());
+      if (p != null && p > 0) await _setSetting('ads_free_price', '$p');
+      if (mounted) toast(context, 'تم الحفظ');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _decide(Map<String, dynamic> t, bool ok) async {
+    try {
+      await supa.rpc('admin_decide_topup', params: {'p_id': t['id'], 'p_approve': ok});
+      await _load();
+      if (mounted) toast(context, ok ? 'تمت الموافقة وأضيف الرصيد' : 'تم الرفض');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('أرقام استلام التحويل', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        TextField(
+            controller: _asia,
+            keyboardType: TextInputType.phone,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(labelText: 'رقم آسياسيل')),
+        const SizedBox(height: 8),
+        TextField(
+            controller: _atheer,
+            keyboardType: TextInputType.phone,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(labelText: 'رقم أثير')),
+        const SizedBox(height: 8),
+        TextField(
+            controller: _adsPrice,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'سعر نسخة بدون إعلانات (دينار)')),
+        const SizedBox(height: 10),
+        GradButton(label: 'حفظ', dense: true, onPressed: _saveSettings),
+        const Divider(height: 32, color: Colors.white12),
+        Text('طلبات الشحن قيد المراجعة (${_pending.length})',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        if (_pending.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Center(child: Text('لا توجد طلبات', style: TextStyle(color: Colors.white54))),
+          ),
+        for (final t in _pending)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: GlassCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${t['name']}  @${t['username']}',
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 4),
+                Text(
+                    t['kind'] == 'gems'
+                        ? '${t['gems']} جوهرة — ${t['price_iqd']} د.ع'
+                        : 'نسخة بدون إعلانات — ${t['price_iqd']} د.ع',
+                    style: const TextStyle(color: Color(0xFFFDE68A))),
+                Text('${t['method'] == 'asiacell' ? 'آسياسيل' : 'أثير'} · رقم العملية: ${t['ref']}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                      child: GradButton(
+                          label: 'موافقة', dense: true, icon: Icons.check_rounded, onPressed: () => _decide(t, true))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: GradButton(
+                          label: 'رفض',
+                          dense: true,
+                          outlined: true,
+                          icon: Icons.close_rounded,
+                          onPressed: () => _decide(t, false))),
+                ]),
+              ]),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+// ============================ الهدايا ============================
+class _GiftsAdminTab extends StatefulWidget {
+  const _GiftsAdminTab();
+
+  @override
+  State<_GiftsAdminTab> createState() => _GiftsAdminTabState();
+}
+
+class _GiftsAdminTabState extends State<_GiftsAdminTab> {
+  List<Map<String, dynamic>> _gifts = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('gifts').select().order('sort').order('price');
+      if (!mounted) return;
+      setState(() {
+        _gifts = List<Map<String, dynamic>>.from(r);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _edit([Map<String, dynamic>? g]) async {
+    final name = TextEditingController(text: (g?['name'] ?? '') as String);
+    final price = TextEditingController(text: g == null ? '' : '${g['price']}');
+    final emoji = TextEditingController(text: (g?['emoji'] ?? '🎁') as String);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text(g == null ? 'هدية جديدة' : 'تعديل الهدية'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'الاسم')),
+          const SizedBox(height: 8),
+          TextField(
+              controller: price,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'السعر بالجواهر')),
+          const SizedBox(height: 8),
+          TextField(controller: emoji, decoration: const InputDecoration(labelText: 'رمز بديل (إيموجي)')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    final pr = int.tryParse(price.text.trim());
+    if (ok != true || name.text.trim().isEmpty || pr == null || pr < 1) return;
+    try {
+      final vals = {'name': name.text.trim(), 'price': pr, 'emoji': emoji.text.trim().isEmpty ? '🎁' : emoji.text.trim()};
+      if (g == null) {
+        await supa.from('gifts').insert({...vals, 'sort': _gifts.length + 1});
+      } else {
+        await supa.from('gifts').update(vals).eq('id', g['id']);
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _image(Map<String, dynamic> g) async {
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 600, imageQuality: 90);
+    if (f == null) return;
+    try {
+      final url = await _uploadImage(f, 'gifts');
+      await supa.from('gifts').update({'image_url': url}).eq('id', g['id']);
+      await _load();
+      if (mounted) toast(context, 'تم تغيير صورة الهدية');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    }
+  }
+
+  Future<void> _upd(Map<String, dynamic> g, Map<String, dynamic> v) async {
+    try {
+      await supa.from('gifts').update(v).eq('id', g['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _del(Map<String, dynamic> g) async {
+    try {
+      await supa.from('gifts').delete().eq('id', g['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _edit(),
+        backgroundColor: C.violet,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('هدية'),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: C.pink))
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+              itemCount: _gifts.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) {
+                final g = _gifts[i];
+                final img = g['image_url'] as String?;
+                return GlassCard(
+                  child: Row(children: [
+                    SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: img != null && img.isNotEmpty
+                          ? Image.network(img, fit: BoxFit.contain)
+                          : Center(child: Text((g['emoji'] ?? '🎁') as String, style: const TextStyle(fontSize: 34))),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(g['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                        Text('${g['price']} جوهرة',
+                            style: const TextStyle(color: Color(0xFF67E8F9), fontSize: 13)),
+                      ]),
+                    ),
+                    Switch(value: g['active'] == true, onChanged: (v) => _upd(g, {'active': v})),
+                    PopupMenuButton<String>(
+                      onSelected: (v) {
+                        if (v == 'edit') _edit(g);
+                        if (v == 'img') _image(g);
+                        if (v == 'noimg') _upd(g, {'image_url': null});
+                        if (v == 'del') _del(g);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('تعديل الاسم والسعر')),
+                        PopupMenuItem(value: 'img', child: Text('تغيير الصورة')),
+                        PopupMenuItem(value: 'noimg', child: Text('استخدام الرمز بدل الصورة')),
+                        PopupMenuItem(value: 'del', child: Text('حذف')),
+                      ],
+                    ),
+                  ]),
+                );
+              },
+            ),
+    );
   }
 }

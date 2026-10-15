@@ -145,7 +145,8 @@ class _RoomsTabState extends State<RoomsTab> {
       case 'friends':
         l.removeWhere((r) => n(r, 'friends') == 0);
     }
-    return l;
+    // الترند دائماً أولاً (الفرز المستقر)
+    return [...l.where((r) => r['trending'] == true), ...l.where((r) => r['trending'] != true)];
   }
 
   Widget _chipBtn(String id, String label) {
@@ -301,6 +302,15 @@ class RoomCard extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
+                  if (room['trending'] == true)
+                    Container(
+                      margin: const EdgeInsetsDirectional.only(end: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFFF97316), Color(0xFFEF4444)]),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Text('🔥 ترند', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                    ),
                   Avatar(
                       name: (room['host_name'] ?? '?') as String,
                       url: room['host_avatar'] as String?,

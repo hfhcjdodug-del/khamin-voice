@@ -10,6 +10,7 @@ import '../level.dart';
 import '../main.dart';
 import '../media.dart';
 import '../room_look.dart';
+import '../shop_screen.dart';
 import '../theme.dart';
 import 'profile_screen.dart';
 
@@ -51,6 +52,9 @@ class _RoomScreenState extends State<RoomScreen> {
   bool _roomMuted = false; // كتم صوت الغرفة عندي أنا فقط
   bool _closed = false;
   String? _error;
+  int _lastGiftId = -1;
+  Map<String, dynamic>? _giftFx;
+  Timer? _fxTimer;
 
   int? get _mySeat {
     for (final e in _seats.entries) {
@@ -85,6 +89,11 @@ class _RoomScreenState extends State<RoomScreen> {
 
   String get _myRole => _roleOf(myId);
   bool get _iAmOwner => _myRole == 'owner';
+  bool get _trending {
+    final t = _look['trend_until'];
+    return t != null && DateTime.tryParse(t.toString())?.isAfter(DateTime.now().toUtc()) == true;
+  }
+
   bool get _iAmMuted => _flags[myId]?['muted'] == true;
   bool get _iAmChatBanned => _flags[myId]?['chat_banned'] == true;
 
@@ -182,7 +191,27 @@ class _RoomScreenState extends State<RoomScreen> {
         .listen((rows) {
       if (!mounted) return;
       setState(() => _messages = rows);
+      _detectGifts(rows);
       _loadProfiles();
+    });
+  }
+
+  /// أول تحميل لا يعيد عرض الهدايا القديمة، وبعدها تظهر أي هدية جديدة كتأثير على الشاشة.
+  void _detectGifts(List<Map<String, dynamic>> rows) {
+    final gifts = rows.where((r) => r['kind'] == 'gift').toList()
+      ..sort((a, b) => (a['id'] as num).compareTo(b['id'] as num));
+    final maxId = gifts.isEmpty ? 0 : (gifts.last['id'] as num).toInt();
+    if (_lastGiftId == -1) {
+      _lastGiftId = maxId;
+      return;
+    }
+    final fresh = gifts.where((r) => (r['id'] as num).toInt() > _lastGiftId).toList();
+    if (fresh.isEmpty) return;
+    _lastGiftId = maxId;
+    setState(() => _giftFx = fresh.last);
+    _fxTimer?.cancel();
+    _fxTimer = Timer(const Duration(milliseconds: 2400), () {
+      if (mounted) setState(() => _giftFx = null);
     });
   }
 
@@ -397,6 +426,11 @@ class _RoomScreenState extends State<RoomScreen> {
               const Divider(color: Colors.white12),
               _sheetAction(Icons.person_rounded, 'عرض الملف الشخصي', '',
                   () => done(() => _openProfile(uid))),
+              if (!mine)
+                _sheetAction(Icons.card_giftcard_rounded, 'إهداء هدية',
+                    uid == _hostId ? 'دعم صاحب الغرفة يرفع الروم إلى الترند' : '',
+                    () => done(() => _giftSheet(to: uid)),
+                    color: const Color(0xFFFDE68A)),
               if (mine && seat > 0)
                 _sheetAction(Icons.mic_off_rounded, 'النزول من المايك', '',
                     () => done(_leaveSeat),
@@ -439,6 +473,258 @@ class _RoomScreenState extends State<RoomScreen> {
           ),
         );
       },
+    );
+  }
+
+
+  // ---------- الهدايا ----------
+
+  Widget _giftIcon(Map<String, dynamic> g, double size) {
+    final img = g['image_url'] as String?;
+    if (img != null && img.isNotEmpty) {
+      return Image.network(img,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Text((g['emoji'] ?? '🎁') as String, style: TextStyle(fontSize: size * 0.8)));
+    }
+    return Text((g['emoji'] ?? '🎁') as String, style: TextStyle(fontSize: size * 0.8));
+  }
+
+  Future<void> _giftSheet({String? to}) async {
+    List<Map<String, dynamic>> gifts = [];
+    var gems = 0;
+    try {
+      gifts = List<Map<String, dynamic>>.from(
+          await supa.from('gifts').select().eq('active', true).order('sort'));
+      gems = (await fetchWallet()).gems;
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+      return;
+    }
+    if (!mounted) return;
+    final ids = <String>[
+      if (_hostId != null && _hostId != myId) _hostId!,
+      ..._seats.values.where((u) => u != myId && u != _hostId),
+      ..._participants
+          .map((p) => p.identity)
+          .where((u) => u != myId && u != _hostId && !_seats.values.contains(u)),
+    ];
+    if (ids.isEmpty) {
+      toast(context, 'لا يوجد أحد لإهدائه الآن');
+      return;
+    }
+    var target = (to != null && ids.contains(to)) ? to : ids.first;
+    var qty = 1;
+    var sending = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setS) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Text('إهداء هدية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                const Spacer(),
+                const Icon(Icons.diamond_rounded, size: 18, color: Color(0xFF67E8F9)),
+                const SizedBox(width: 4),
+                Text('$gems', style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ShopScreen()));
+                    try {
+                      final w = await fetchWallet();
+                      setS(() => gems = w.gems);
+                    } catch (_) {}
+                  },
+                  child: const Icon(Icons.add_circle_rounded, color: C.pink),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 74,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: ids.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) {
+                    final id = ids[i];
+                    final pr = _profiles[id];
+                    final on = id == target;
+                    return GestureDetector(
+                      onTap: () => setS(() => target = id),
+                      child: Container(
+                        width: 62,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: on ? C.pink : Colors.transparent, width: 2),
+                        ),
+                        child: Column(children: [
+                          Avatar(name: (pr?['name'] ?? '?') as String, url: pr?['avatar_url'] as String?, size: 36),
+                          Text(id == _hostId ? 'المضيف' : ((pr?['name'] ?? '...') as String),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 10)),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (target == _hostId)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('دعم صاحب الغرفة يحسب لترند الروم 🔥',
+                      style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12)),
+                ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 230,
+                child: GridView.count(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 0.9,
+                  children: [
+                    for (final g in gifts)
+                      GestureDetector(
+                        onTap: sending
+                            ? null
+                            : () async {
+                                setS(() => sending = true);
+                                try {
+                                  await supa.rpc('send_gift', params: {
+                                    'p_room': widget.roomId,
+                                    'p_to': target,
+                                    'p_gift': g['id'],
+                                    'p_qty': qty,
+                                  });
+                                  final w = await fetchWallet();
+                                  setS(() => gems = w.gems);
+                                } catch (e) {
+                                  final msg = e.toString();
+                                  if (mounted) {
+                                    toast(
+                                        context,
+                                        msg.contains('not enough gems')
+                                            ? 'رصيدك من الجواهر لا يكفي، اضغط + للشحن'
+                                            : msg.contains('target not in room')
+                                                ? 'هذا الشخص غادر الغرفة'
+                                                : friendlyError(e));
+                                  }
+                                } finally {
+                                  setS(() => sending = false);
+                                }
+                              },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: C.glass,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: C.glassBorder),
+                          ),
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            _giftIcon(g, 46),
+                            const SizedBox(height: 2),
+                            Text(g['name'] as String,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              const Icon(Icons.diamond_rounded, size: 12, color: Color(0xFF67E8F9)),
+                              Text(' ${g['price']}', style: const TextStyle(fontSize: 12)),
+                            ]),
+                          ]),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(children: [
+                const Text('الكمية:  '),
+                for (final q in const [1, 5, 10, 50])
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: ChoiceChip(
+                      label: Text('$q'),
+                      selected: qty == q,
+                      onSelected: (_) => setS(() => qty = q),
+                    ),
+                  ),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _giftLine(Map<String, dynamic> m) {
+    final meta = Map<String, dynamic>.from((m['meta'] as Map?) ?? const {});
+    final uid = m['user_id'] as String;
+    final name = (_profiles[uid]?['name'] ?? '...') as String;
+    final gems = (meta['gems'] as num?)?.toInt() ?? 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0x33F59E0B), Color(0x00F59E0B)]),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          _giftIcon(meta, 34),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(TextSpan(children: [
+              TextSpan(text: name, style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFFDE68A))),
+              const TextSpan(text: '  أهدى  '),
+              TextSpan(text: '${meta['to_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w900)),
+              TextSpan(text: '  ${meta['name'] ?? ''} ×${meta['qty'] ?? 1}'),
+            ])),
+          ),
+          const Icon(Icons.diamond_rounded, size: 13, color: Color(0xFF67E8F9)),
+          Text(' $gems', style: const TextStyle(fontSize: 12)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _giftOverlay() {
+    final m = _giftFx;
+    if (m == null) return const SizedBox.shrink();
+    final meta = Map<String, dynamic>.from((m['meta'] as Map?) ?? const {});
+    final name = (_profiles[m['user_id']]?['name'] ?? '') as String;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: TweenAnimationBuilder<double>(
+          key: ValueKey(m['id']),
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 2300),
+          builder: (c, t, _) {
+            final grow = t < 0.25 ? t / 0.25 : 1.0;
+            final fade = t > 0.8 ? (1 - t) / 0.2 : 1.0;
+            return Opacity(
+              opacity: fade.clamp(0.0, 1.0),
+              child: Center(
+                child: Transform.scale(
+                  scale: 0.4 + 0.8 * grow,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    _giftIcon(meta, 130),
+                    Text('$name  ×${meta['qty'] ?? 1}',
+                        style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            shadows: [Shadow(blurRadius: 8, color: Colors.black)])),
+                  ]),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -666,6 +952,7 @@ class _RoomScreenState extends State<RoomScreen> {
     _seatSub?.cancel();
     _flagSub?.cancel();
     _lookSub?.cancel();
+    _fxTimer?.cancel();
     _events?.dispose();
     _input.dispose();
     () async {
@@ -815,6 +1102,7 @@ class _RoomScreenState extends State<RoomScreen> {
 
   /// رسالة بدون إطار: صورة + اسم + مستوى + لقب + وسم الرتبة، والنص تحته.
   Widget _message(Map<String, dynamic> m) {
+    if (m['kind'] == 'gift') return _giftLine(m);
     final uid = m['user_id'] as String;
     final prof = _profiles[uid];
     final name = (prof?['name'] ?? '...') as String;
@@ -897,6 +1185,7 @@ class _RoomScreenState extends State<RoomScreen> {
           _circleBtn(_roomMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
               _toggleRoomMute,
               bg: _roomMuted ? const Color(0xD9EF4444) : null),
+          _circleBtn(Icons.card_giftcard_rounded, () => _giftSheet(), bg: const Color(0x33F59E0B)),
           Expanded(
             child: _iAmChatBanned
                 ? const Padding(
@@ -955,6 +1244,15 @@ class _RoomScreenState extends State<RoomScreen> {
                           style: const TextStyle(fontSize: 11, color: Colors.white70)),
                   ]),
                 ),
+                if (_trending)
+                  Container(
+                    margin: const EdgeInsetsDirectional.only(end: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [Color(0xFFF97316), Color(0xFFEF4444)]),
+                        borderRadius: BorderRadius.circular(14)),
+                    child: const Text('🔥 ترند', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                  ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration:
@@ -1012,6 +1310,7 @@ class _RoomScreenState extends State<RoomScreen> {
             _composer(),
           ]),
         ),
+        _giftOverlay(),
       ]),
     );
   }

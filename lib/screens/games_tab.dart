@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../shop_screen.dart';
 import '../theme.dart';
 import 'guess_lobby_screen.dart';
 import 'guess_match_screen.dart';
@@ -156,6 +157,7 @@ class _GamesTabState extends State<GamesTab> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
+          const AdsPromo(),
           for (final inv in _invites)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
