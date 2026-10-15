@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -12,6 +13,7 @@ import '../main.dart';
 import '../media.dart';
 import '../room_look.dart';
 import '../shop_screen.dart';
+import '../songs.dart';
 import '../theme.dart';
 import 'profile_screen.dart';
 
@@ -60,6 +62,14 @@ class _RoomScreenState extends State<RoomScreen> {
   StreamSubscription<List<Map<String, dynamic>>>? _bcastSub;
   Map<String, dynamic>? _giftFx;
   Timer? _fxTimer;
+  // موسيقى الروم: كل مستمع يشغّلها محلياً بالتزامن مع وقت السيرفر
+  AudioPlayer? _mp;
+  String? _musicKey; // url|started لتمييز الأغنية الحالية
+  int _srvOffsetMs = 0;
+  bool _musicMuted = false;
+  double _duck = 1.0;
+  DateTime _lastSpeech = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _duckTimer;
 
   int? get _mySeat {
     for (final e in _seats.entries) {
@@ -123,6 +133,8 @@ class _RoomScreenState extends State<RoomScreen> {
     try {
       final ok = await supa.rpc('room_heartbeat', params: {'p_room': widget.roomId});
       if (ok != true) throw 'الغرفة منتهية';
+      supa.rpc('room_visited', params: {'p_room': widget.roomId}).catchError((_) => null);
+      _initMusic();
       _beat = Timer.periodic(const Duration(seconds: 15), (_) => _heartbeat());
       _gainXp();
       _xpTimer = Timer.periodic(const Duration(minutes: 10), (_) => _gainXp());
@@ -158,6 +170,12 @@ class _RoomScreenState extends State<RoomScreen> {
       if (!mounted) return;
       if (e.toString().contains('kicked')) {
         _handleKicked();
+        return;
+      }
+      if (e.toString().contains('room locked')) {
+        _closed = true;
+        toast(context, 'الروم مقفلة 🔒');
+        Navigator.of(context).pop();
         return;
       }
       setState(() {
@@ -344,6 +362,184 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
+  // ---------- الموسيقى ----------
+
+  bool get _canDj => _rank(_myRole) >= 2;
+  String? get _songUrl => _look['song_url'] as String?;
+  bool get _songPaused => _look['song_paused_ms'] != null;
+
+  Future<void> _initMusic() async {
+    try {
+      final r = await supa.rpc('server_time') as String;
+      _srvOffsetMs = DateTime.parse(r).millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
+    } catch (_) {}
+    _duckTimer ??= Timer.periodic(const Duration(milliseconds: 300), (_) => _tickDuck());
+    _syncMusic();
+  }
+
+  /// خفض صوت الموسيقى تلقائياً أثناء حديث أي شخص، وإرجاعه بعد ثانية ونصف من الصمت.
+  void _tickDuck() {
+    final p = _mp;
+    if (p == null || _songUrl == null) return;
+    try {
+      if (_room.activeSpeakers.isNotEmpty) _lastSpeech = DateTime.now();
+    } catch (_) {}
+    final talking = DateTime.now().difference(_lastSpeech).inMilliseconds < 1500;
+    final target = talking ? 0.2 : 1.0;
+    if ((_duck - target).abs() > 0.01) {
+      _duck += (target - _duck) * 0.5;
+      _applyMusicVolume();
+    }
+  }
+
+  void _applyMusicVolume() {
+    _mp?.setVolume(_musicMuted ? 0 : (0.9 * _duck).clamp(0.0, 1.0));
+  }
+
+  Future<void> _syncMusic() async {
+    final url = _songUrl;
+    if (url == null) {
+      _musicKey = null;
+      try {
+        await _mp?.stop();
+      } catch (_) {}
+      if (mounted) setState(() {});
+      return;
+    }
+    try {
+      final p = _mp ??= AudioPlayer();
+      await p.setAudioContext(AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build());
+      final started = DateTime.parse(_look['song_started'] as String).millisecondsSinceEpoch;
+      final pausedMs = (_look['song_paused_ms'] as num?)?.toInt();
+      final nowSrv = DateTime.now().millisecondsSinceEpoch + _srvOffsetMs;
+      final pos = pausedMs ?? (nowSrv - started).clamp(0, 1 << 31);
+      final key = '$url|${_look['song_started']}';
+      _applyMusicVolume();
+      if (pausedMs != null) {
+        if (_musicKey == null || !_musicKey!.startsWith(url)) {
+          await p.setSourceUrl(url);
+          await p.seek(Duration(milliseconds: pos));
+        }
+        _musicKey = '$url|paused';
+        await p.pause();
+      } else if (_musicKey != key) {
+        _musicKey = key;
+        await p.setSourceUrl(url);
+        await p.seek(Duration(milliseconds: pos));
+        await p.resume();
+      }
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _song(String action, [String? id]) async {
+    try {
+      await supa.rpc('room_song', params: {'p_room': widget.roomId, 'p_action': action, 'p_song': id});
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _pickSong() async {
+    final s = await Navigator.push<Map<String, dynamic>>(
+        context, MaterialPageRoute(builder: (_) => const SongsScreen(pick: true)));
+    if (s != null) await _song('play', s['id'] as String);
+  }
+
+  Future<void> _musicSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('موسيقى الروم', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            const Text('تُشغَّل الأغنية عند كل المستمعين، ويخفت صوتها تلقائياً عندما يتحدث أحد.',
+                style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 14),
+            GradButton(
+                label: _songUrl == null ? 'اختر أغنية' : 'تغيير الأغنية',
+                icon: Icons.library_music_rounded,
+                onPressed: () {
+                  Navigator.pop(c);
+                  _pickSong();
+                }),
+            if (_songUrl != null) ...[
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: GradButton(
+                      label: _songPaused ? 'استئناف' : 'إيقاف مؤقت',
+                      icon: _songPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                      outlined: true,
+                      onPressed: () {
+                        Navigator.pop(c);
+                        _song(_songPaused ? 'resume' : 'pause');
+                      }),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GradButton(
+                      label: 'إيقاف',
+                      icon: Icons.stop_rounded,
+                      outlined: true,
+                      onPressed: () {
+                        Navigator.pop(c);
+                        _song('stop');
+                      }),
+                ),
+              ]),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _nowPlaying() {
+    if (_songUrl == null) return const SizedBox.shrink();
+    final t = (_look['song_title'] ?? '') as String;
+    final a = (_look['song_artist'] ?? '') as String;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(16)),
+      child: Row(children: [
+        Icon(_songPaused ? Icons.pause_circle_rounded : Icons.music_note_rounded, size: 18, color: C.pink),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(a.isEmpty ? t : '$t · $a',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        ),
+        GestureDetector(
+          onTap: () {
+            setState(() => _musicMuted = !_musicMuted);
+            _applyMusicVolume();
+          },
+          child: Icon(_musicMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded, size: 20),
+        ),
+        if (_canDj) ...[
+          const SizedBox(width: 10),
+          GestureDetector(onTap: _musicSheet, child: const Icon(Icons.tune_rounded, size: 20)),
+        ],
+      ]),
+    );
+  }
+
+  Future<void> _toggleLock() async {
+    final lock = _look['locked'] != true;
+    try {
+      await supa.rpc('set_room_locked', params: {'p_room': widget.roomId, 'p_locked': lock});
+      if (mounted) {
+        setState(() => _look['locked'] = lock);
+        toast(context, lock ? 'تم قفل الروم 🔒 لن يدخلها أحد جديد' : 'تم فتح الروم 🔓');
+      }
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
   void _listenLook() {
     _lookSub = supa
         .from('rooms')
@@ -352,6 +548,7 @@ class _RoomScreenState extends State<RoomScreen> {
         .listen((rows) {
       if (!mounted || rows.isEmpty) return;
       setState(() => _look = Map<String, dynamic>.from(rows.first));
+      _syncMusic();
     });
   }
 
@@ -1052,6 +1249,9 @@ class _RoomScreenState extends State<RoomScreen> {
     _fxTimer?.cancel();
     _bcastTimer?.cancel();
     _bcastSub?.cancel();
+    _duckTimer?.cancel();
+    _mp?.stop();
+    _mp?.dispose();
     _events?.dispose();
     _input.dispose();
     () async {
@@ -1285,6 +1485,7 @@ class _RoomScreenState extends State<RoomScreen> {
               _toggleRoomMute,
               bg: _roomMuted ? const Color(0xD9EF4444) : null),
           _circleBtn(Icons.card_giftcard_rounded, () => _giftSheet(), bg: const Color(0x33F59E0B)),
+          if (_canDj) _circleBtn(Icons.music_note_rounded, _musicSheet, bg: const Color(0x33EC4899)),
           Expanded(
             child: _iAmChatBanned
                 ? const Padding(
@@ -1365,6 +1566,13 @@ class _RoomScreenState extends State<RoomScreen> {
                 ),
                 if (_iAmOwner)
                   IconButton(
+                    tooltip: 'قفل الروم',
+                    onPressed: _toggleLock,
+                    icon: Icon(_look['locked'] == true ? Icons.lock_rounded : Icons.lock_open_rounded,
+                        color: _look['locked'] == true ? const Color(0xFFFDE68A) : null),
+                  ),
+                if (_iAmOwner)
+                  IconButton(
                     onPressed: _settingsSheet,
                     icon: const Icon(Icons.settings_rounded),
                   ),
@@ -1378,6 +1586,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 padding: const EdgeInsets.all(10),
                 child: Text('تعذّر الاتصال بالصوت: $_error', style: const TextStyle(fontSize: 13)),
               ),
+            _nowPlaying(),
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: h * 0.50),
               child: SingleChildScrollView(

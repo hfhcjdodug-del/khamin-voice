@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../room_look.dart';
+import '../songs.dart';
 import '../theme.dart';
 import 'room_screen.dart';
 
@@ -198,6 +199,21 @@ class _RoomsTabState extends State<RoomsTab> {
                   const Text('الغرف الحية',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                   const Spacer(),
+                  IconButton(
+                    tooltip: 'الأغاني',
+                    onPressed: () => Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => const SongsScreen())),
+                    icon: const Icon(Icons.library_music_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'الرومات السابقة',
+                    onPressed: () async {
+                      await Navigator.push(
+                          context, MaterialPageRoute(builder: (_) => const RecentRoomsScreen()));
+                      if (mounted) _load(silent: true);
+                    },
+                    icon: const Icon(Icons.history_rounded),
+                  ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(color: C.glass, borderRadius: BorderRadius.circular(20)),
@@ -333,10 +349,19 @@ class RoomCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                      Row(children: [
+                        if (room['locked'] == true)
+                          const Padding(
+                            padding: EdgeInsetsDirectional.only(end: 4),
+                            child: Icon(Icons.lock_rounded, size: 15, color: Color(0xFFFDE68A)),
+                          ),
+                        Expanded(
+                          child: Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                        ),
+                      ]),
                       Text(
                           topic.isEmpty
                               ? 'المضيف: ${room['host_name']}'
@@ -395,6 +420,120 @@ class RoomCard extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+
+/// الرومات السابقة: أصحاب الرومات الذين دخلت عندهم، مع حالة الروم الآن.
+class RecentRoomsScreen extends StatefulWidget {
+  const RecentRoomsScreen({super.key});
+
+  @override
+  State<RecentRoomsScreen> createState() => _RecentRoomsScreenState();
+}
+
+class _RecentRoomsScreenState extends State<RecentRoomsScreen> {
+  List<Map<String, dynamic>> _rows = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.rpc('my_recent_rooms');
+      if (mounted) {
+        setState(() {
+          _rows = List<Map<String, dynamic>>.from(r as List);
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        toast(context, friendlyError(e));
+      }
+    }
+  }
+
+  Future<void> _open(Map<String, dynamic> r) async {
+    final id = r['live_room_id'] as String?;
+    if (id == null) {
+      toast(context, 'هذا الروم غير مفتوح الآن');
+      return;
+    }
+    await openRoom(context, {
+      'id': id,
+      'title': r['live_title'] ?? r['room_title'],
+      'topic': r['live_topic'] ?? '',
+      'host_id': r['host_id'],
+    });
+    if (mounted) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('الرومات السابقة', style: TextStyle(fontWeight: FontWeight.w800))),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: C.pink))
+          : _rows.isEmpty
+              ? const Center(
+                  child: Text('لم تدخل أي روم بعد',
+                      style: TextStyle(color: Colors.white60, fontSize: 16)))
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                  itemCount: _rows.length,
+                  itemBuilder: (_, i) {
+                    final r = _rows[i];
+                    final live = r['live_room_id'] != null;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: GlassCard(
+                        onTap: () => _open(r),
+                        child: Row(children: [
+                          Avatar(name: (r['host_name'] ?? '?') as String, url: r['host_avatar'] as String?, size: 40),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Row(children: [
+                                if (r['locked'] == true)
+                                  const Padding(
+                                    padding: EdgeInsetsDirectional.only(end: 4),
+                                    child: Icon(Icons.lock_rounded, size: 14, color: Color(0xFFFDE68A)),
+                                  ),
+                                Expanded(
+                                  child: Text((r['live_title'] ?? r['room_title']) as String,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                                ),
+                              ]),
+                              Text('المضيف: ${r['host_name']}',
+                                  style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                            ]),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: live ? const Color(0x3334D399) : Colors.white12,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(live ? 'مباشر الآن' : 'غير مفتوح',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: live ? C.green : Colors.white54)),
+                          ),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }

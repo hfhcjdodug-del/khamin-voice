@@ -218,6 +218,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   if (s.contains('seat taken')) return 'المقعد محجوز';
   if (s.contains('host only')) return 'هذا المقعد للمضيف فقط';
+  if (s.contains('room locked')) return 'الروم مقفلة 🔒';
   if (s.contains('kicked')) return 'تم طردك من هذه الغرفة';
   if (s.contains('owner only')) return 'هذا الإجراء لصاحب الغرفة فقط';
   if (s.contains('not allowed')) return 'لا تملك صلاحية على هذا المستخدم';
