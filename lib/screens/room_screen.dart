@@ -6,6 +6,7 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../audio.dart';
+import '../gift_image.dart';
 import '../level.dart';
 import '../main.dart';
 import '../media.dart';
@@ -53,6 +54,10 @@ class _RoomScreenState extends State<RoomScreen> {
   bool _closed = false;
   String? _error;
   int _lastGiftId = -1;
+  int _lastBcastId = -1;
+  Map<String, dynamic>? _bcast;
+  Timer? _bcastTimer;
+  StreamSubscription<List<Map<String, dynamic>>>? _bcastSub;
   Map<String, dynamic>? _giftFx;
   Timer? _fxTimer;
 
@@ -125,6 +130,7 @@ class _RoomScreenState extends State<RoomScreen> {
       _listenSeats();
       _listenFlags();
       _listenLook();
+      _listenBroadcasts();
 
       final res = await supa.functions.invoke('livekit-token', body: {'room_id': widget.roomId});
       final data = res.data;
@@ -251,6 +257,75 @@ class _RoomScreenState extends State<RoomScreen> {
       }
       if (_iAmMuted && _micOn) _setMic(false);
     });
+  }
+
+  /// إعلان عام: دعم كبير (500+ جوهرة) يظهر في كل الغرف، ويطول ويكبر كلما زاد المبلغ.
+  void _listenBroadcasts() {
+    _bcastSub = supa
+        .from('gift_broadcasts')
+        .stream(primaryKey: ['id'])
+        .order('id', ascending: false)
+        .limit(1)
+        .listen((rows) {
+      if (!mounted || rows.isEmpty) return;
+      final r = rows.first;
+      final id = (r['id'] as num).toInt();
+      if (_lastBcastId == -1) {
+        _lastBcastId = id;
+        return;
+      }
+      if (id <= _lastBcastId) return;
+      _lastBcastId = id;
+      final tier = (r['tier'] as num?)?.toInt() ?? 1;
+      setState(() => _bcast = r);
+      _bcastTimer?.cancel();
+      _bcastTimer = Timer(Duration(seconds: tier == 3 ? 15 : (tier == 2 ? 10 : 6)), () {
+        if (mounted) setState(() => _bcast = null);
+      });
+    });
+  }
+
+  Widget _bcastBanner() {
+    final r = _bcast;
+    if (r == null) return const SizedBox.shrink();
+    final tier = (r['tier'] as num?)?.toInt() ?? 1;
+    final colors = tier == 3
+        ? const [Color(0xFFFDE047), Color(0xFFF97316), Color(0xFFDC2626)]
+        : tier == 2
+            ? const [Color(0xFFA855F7), Color(0xFFEC4899)]
+            : const [Color(0xFF0EA5E9), Color(0xFF6366F1)];
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Container(
+          key: ValueKey(r['id']),
+          margin: EdgeInsets.fromLTRB(10, 6, 10, 0),
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: tier == 3 ? 16 : (tier == 2 ? 12 : 9)),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: colors),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(color: colors.first.withValues(alpha: 0.6), blurRadius: tier == 3 ? 26 : 14)],
+          ),
+          child: Row(children: [
+            Text(tier == 3 ? '👑' : (tier == 2 ? '🔥' : '💎'), style: TextStyle(fontSize: tier == 3 ? 30 : 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text.rich(
+                TextSpan(children: [
+                  const TextSpan(text: 'قام  '),
+                  TextSpan(text: '${r['from_name']}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                  TextSpan(text: '  بإرسال ${r['gems']} ماسة إلى  '),
+                  TextSpan(text: '${r['to_name']}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                ]),
+                style: TextStyle(fontSize: tier == 3 ? 17 : (tier == 2 ? 15 : 13.5), color: tier == 3 ? Colors.black : Colors.white),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   void _listenLook() {
@@ -479,17 +554,8 @@ class _RoomScreenState extends State<RoomScreen> {
 
   // ---------- الهدايا ----------
 
-  Widget _giftIcon(Map<String, dynamic> g, double size) {
-    final img = g['image_url'] as String?;
-    if (img != null && img.isNotEmpty) {
-      return Image.network(img,
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Text((g['emoji'] ?? '🎁') as String, style: TextStyle(fontSize: size * 0.8)));
-    }
-    return Text((g['emoji'] ?? '🎁') as String, style: TextStyle(fontSize: size * 0.8));
-  }
+  Widget _giftIcon(Map<String, dynamic> g, double size) =>
+      GiftImage(image: g['image_url'] as String?, emoji: (g['emoji'] ?? '🎁') as String, size: size);
 
   Future<void> _giftSheet({String? to}) async {
     List<Map<String, dynamic>> gifts = [];
@@ -583,12 +649,12 @@ class _RoomScreenState extends State<RoomScreen> {
                 ),
               const SizedBox(height: 10),
               SizedBox(
-                height: 230,
+                height: 300,
                 child: GridView.count(
-                  crossAxisCount: 3,
+                  crossAxisCount: 4,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 0.9,
+                  childAspectRatio: 0.78,
                   children: [
                     for (final g in gifts)
                       GestureDetector(
@@ -953,6 +1019,8 @@ class _RoomScreenState extends State<RoomScreen> {
     _flagSub?.cancel();
     _lookSub?.cancel();
     _fxTimer?.cancel();
+    _bcastTimer?.cancel();
+    _bcastSub?.cancel();
     _events?.dispose();
     _input.dispose();
     () async {
@@ -1311,6 +1379,7 @@ class _RoomScreenState extends State<RoomScreen> {
           ]),
         ),
         _giftOverlay(),
+        _bcastBanner(),
       ]),
     );
   }

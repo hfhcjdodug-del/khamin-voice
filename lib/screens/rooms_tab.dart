@@ -134,6 +134,16 @@ class _RoomsTabState extends State<RoomsTab> {
     if (mounted) _load(silent: true);
   }
 
+  /// مركز الغرفة بين الغرف الترند (حسب الدعم): 1 و2 و3.
+  Map<String, int> get _ranks {
+    final m = <String, int>{};
+    var n = 0;
+    for (final r in _rooms) {
+      if (r['trending'] == true && n < 3) m[r['id'] as String] = ++n;
+    }
+    return m;
+  }
+
   List<Map<String, dynamic>> get _shown {
     final l = List<Map<String, dynamic>>.of(_rooms);
     int n(Map<String, dynamic> r, String k) => (r[k] as num?)?.toInt() ?? 0;
@@ -243,7 +253,7 @@ class _RoomsTabState extends State<RoomsTab> {
                   for (final r in shown)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: RoomCard(room: r, onTap: () => _open(r)),
+                      child: RoomCard(room: r, rank: _ranks[r['id']], onTap: () => _open(r)),
                     ),
                   GestureDetector(
                     onTap: () async {
@@ -276,7 +286,8 @@ class _RoomsTabState extends State<RoomsTab> {
 class RoomCard extends StatelessWidget {
   final Map<String, dynamic> room;
   final VoidCallback onTap;
-  const RoomCard({super.key, required this.room, required this.onTap});
+  final int? rank;
+  const RoomCard({super.key, required this.room, required this.onTap, this.rank});
 
   @override
   Widget build(BuildContext context) {
@@ -309,7 +320,11 @@ class RoomCard extends StatelessWidget {
                       decoration: BoxDecoration(
                           gradient: const LinearGradient(colors: [Color(0xFFF97316), Color(0xFFEF4444)]),
                           borderRadius: BorderRadius.circular(12)),
-                      child: const Text('🔥 ترند', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                      child: Text(
+                          rank == null
+                              ? '🔥 ترند'
+                              : '${rank == 1 ? '🥇' : (rank == 2 ? '🥈' : '🥉')} المركز $rank',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                     ),
                   Avatar(
                       name: (room['host_name'] ?? '?') as String,

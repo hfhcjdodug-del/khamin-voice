@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../gift_image.dart';
 import '../level.dart';
 import '../main.dart';
 import '../theme.dart';
@@ -26,6 +27,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _p;
   bool _loading = true;
   bool _viewerAdmin = false;
+  List<Map<String, dynamic>> _gifts = [];
+  int _giftRecv = 0;
+  int _giftSent = 0;
   int _tab = 0; // 0 الملف الشخصي، 1 الشرف، 2 المنشورات، 3 العائلة
 
   bool get _isMe => widget.userId == myId;
@@ -47,6 +51,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final a = await supa.rpc('am_i_admin');
       if (mounted) setState(() => _viewerAdmin = a == true);
+    } catch (_) {}
+    try {
+      final g = await supa.rpc('user_gifts', params: {'p_id': widget.userId}) as List;
+      final t = await supa.rpc('user_gift_totals', params: {'p_id': widget.userId}) as List;
+      if (mounted) {
+        setState(() {
+          _gifts = List<Map<String, dynamic>>.from(g);
+          if (t.isNotEmpty) {
+            _giftRecv = ((t.first as Map)['received'] as num?)?.toInt() ?? 0;
+            _giftSent = ((t.first as Map)['sent'] as num?)?.toInt() ?? 0;
+          }
+        });
+      }
     } catch (_) {}
     try {
       final r = await supa.rpc('get_profile', params: {'p_id': widget.userId}) as List;
@@ -533,6 +550,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
         ],
       ),
+      const SizedBox(height: 14),
+      Row(children: [
+        const Text('الهدايا المستلمة', style: TextStyle(fontWeight: FontWeight.w800)),
+        const Spacer(),
+        const Icon(Icons.diamond_rounded, size: 14, color: Color(0xFF67E8F9)),
+        Text(' استلم $_giftRecv · أرسل $_giftSent',
+            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+      ]),
+      const SizedBox(height: 8),
+      if (_gifts.isEmpty)
+        const Text('لم يستلم هدايا بعد', style: TextStyle(color: Colors.white38, fontSize: 13))
+      else
+        GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 0.85,
+          children: [
+            for (final g in _gifts)
+              Container(
+                decoration: BoxDecoration(
+                  color: C.glass,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: C.glassBorder),
+                ),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  GiftImage(
+                      image: g['image_url'] as String?,
+                      emoji: (g['emoji'] ?? '🎁') as String,
+                      size: 44),
+                  const SizedBox(height: 2),
+                  Text('×${g['qty']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                ]),
+              ),
+          ],
+        ),
       const SizedBox(height: 14),
       const Text('الإنجازات', style: TextStyle(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../config.dart';
+import '../gift_image.dart';
 import '../main.dart';
 import '../media.dart';
 import '../theme.dart';
@@ -1751,13 +1752,7 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
                 final img = g['image_url'] as String?;
                 return GlassCard(
                   child: Row(children: [
-                    SizedBox(
-                      width: 52,
-                      height: 52,
-                      child: img != null && img.isNotEmpty
-                          ? Image.network(img, fit: BoxFit.contain)
-                          : Center(child: Text((g['emoji'] ?? '🎁') as String, style: const TextStyle(fontSize: 34))),
-                    ),
+                    GiftImage(image: img, emoji: (g['emoji'] ?? '🎁') as String, size: 52),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
