@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 import '../gift_image.dart';
 import '../level.dart';
 import '../main.dart';
+import '../shop_screen.dart';
 import '../theme.dart';
 import 'admin_screen.dart';
 import 'challenge.dart';
@@ -30,14 +31,104 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Map<String, dynamic>> _gifts = [];
   int _giftRecv = 0;
   int _giftSent = 0;
+  ({int gems, bool adsFree, int rubyPts})? _wallet;
+  bool _converting = false;
   int _tab = 0; // 0 الملف الشخصي، 1 الشرف، 2 المنشورات، 3 العائلة
 
   bool get _isMe => widget.userId == myId;
+
+  Future<void> _loadWallet() async {
+    if (!_isMe) return;
+    try {
+      final w = await fetchWallet();
+      if (mounted) setState(() => _wallet = w);
+    } catch (_) {}
+  }
+
+  Future<void> _convert(int n) async {
+    if (_converting) return;
+    setState(() => _converting = true);
+    try {
+      final g = await supa.rpc('convert_rubies', params: {'p_count': n}) as int;
+      if (mounted) toast(context, 'تم تحويل الياقوت إلى $g 💎');
+      await _loadWallet();
+    } catch (e) {
+      if (mounted) toast(context, e.toString().contains('no rubies') ? 'لا توجد ياقوتات كافية' : friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _converting = false);
+    }
+  }
+
+  Widget _walletCard() {
+    final w = _wallet;
+    final rubies = (w?.rubyPts ?? 0) ~/ rubyPtsPer;
+    final part = (w?.rubyPts ?? 0) % rubyPtsPer;
+    const red = Color(0xFFEF4444);
+    Widget conv(String label, int n, bool on) => Expanded(
+          child: OutlinedButton(
+            onPressed: on && !_converting ? () => _convert(n) : null,
+            style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: on ? red : Colors.white24),
+                padding: const EdgeInsets.symmetric(horizontal: 4)),
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: const TextStyle(fontSize: 12))),
+          ),
+        );
+    return GlassCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => const ShopScreen()));
+                _loadWallet();
+              },
+              child: Row(children: [
+                const Icon(Icons.diamond_rounded, color: Color(0xFF67E8F9)),
+                const SizedBox(width: 6),
+                Text('${w?.gems ?? 0}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                const SizedBox(width: 4),
+                const Text('جوهرة', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                const SizedBox(width: 4),
+                const Icon(Icons.add_circle_rounded, size: 18, color: C.pink),
+              ]),
+            ),
+          ),
+          Container(width: 1, height: 28, color: Colors.white12),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Row(children: [
+              const Icon(Icons.hexagon_rounded, color: red),
+              const SizedBox(width: 6),
+              Text('$rubies', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              const SizedBox(width: 4),
+              const Text('ياقوت', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Text(
+            rubies == 0
+                ? 'تحصل على ياقوتة عن كل $rubyPtsPer جوهرة تُهدى إليك (تبقى $part/$rubyPtsPer)'
+                : 'ياقوتاتك تساوي ${rubies * rubyToGems} 💎  (الياقوتة = $rubyToGems 💎)',
+            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+        const SizedBox(height: 8),
+        Row(children: [
+          conv('تحويل 1', 1, rubies >= 1),
+          const SizedBox(width: 6),
+          conv('تحويل 5', 5, rubies >= 5),
+          const SizedBox(width: 6),
+          conv('تحويل الكل (${rubies * rubyToGems} 💎)', 0, rubies >= 1),
+        ]),
+      ]),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadWallet();
     if (!_isMe) {
       Future(() async {
         try {
@@ -385,12 +476,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Icon(i, size: 18, color: C.violet),
           const SizedBox(width: 8),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.2)),
+              const SizedBox(height: 2),
               Text(v.isEmpty ? '—' : v,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, height: 1.2)),
             ]),
           ),
         ]),
@@ -406,13 +501,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _infoCell(Icons.translate_rounded, 'اللغة', (p['language'] ?? '') as String),
       _infoCell(Icons.favorite_rounded, 'الحالة', (p['marital'] ?? '') as String),
     ];
-    return GridView.count(
-      crossAxisCount: 2,
+    return GridView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 2.9,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        mainAxisExtent: 60,
+      ),
       children: cells,
     );
   }
@@ -420,6 +517,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _profileTab(Map<String, dynamic> p) {
     final bio = ((p['bio'] ?? '') as String);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (_isMe) ...[_walletCard(), const SizedBox(height: 10)],
       GlassCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: const [

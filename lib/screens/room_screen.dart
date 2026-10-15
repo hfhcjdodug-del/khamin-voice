@@ -202,6 +202,22 @@ class _RoomScreenState extends State<RoomScreen> {
     });
   }
 
+  /// بعد إرسال هدية: نجلب الرسائل فوراً حتى يرى المُرسِل هديته دون انتظار أي مستخدم آخر.
+  Future<void> _refreshMessages() async {
+    try {
+      final rows = List<Map<String, dynamic>>.from(await supa
+          .from('room_messages')
+          .select()
+          .eq('room_id', widget.roomId)
+          .order('id', ascending: false)
+          .limit(60));
+      if (!mounted) return;
+      setState(() => _messages = rows);
+      _detectGifts(rows);
+      _loadProfiles();
+    } catch (_) {}
+  }
+
   /// أول تحميل لا يعيد عرض الهدايا القديمة، وبعدها تظهر أي هدية جديدة كتأثير على الشاشة.
   void _detectGifts(List<Map<String, dynamic>> rows) {
     final gifts = rows.where((r) => r['kind'] == 'gift').toList()
@@ -654,7 +670,7 @@ class _RoomScreenState extends State<RoomScreen> {
                   crossAxisCount: 4,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 0.78,
+                  childAspectRatio: 0.72,
                   children: [
                     for (final g in gifts)
                       GestureDetector(
@@ -671,6 +687,7 @@ class _RoomScreenState extends State<RoomScreen> {
                                   });
                                   final w = await fetchWallet();
                                   setS(() => gems = w.gems);
+                                  _refreshMessages();
                                 } catch (e) {
                                   final msg = e.toString();
                                   if (mounted) {
@@ -692,15 +709,29 @@ class _RoomScreenState extends State<RoomScreen> {
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: C.glassBorder),
                           ),
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            _giftIcon(g, 46),
-                            const SizedBox(height: 2),
-                            Text(g['name'] as String,
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              const Icon(Icons.diamond_rounded, size: 12, color: Color(0xFF67E8F9)),
-                              Text(' ${g['price']}', style: const TextStyle(fontSize: 12)),
-                            ]),
+                          padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                          child: Column(children: [
+                            Expanded(child: Center(child: _giftIcon(g, 44))),
+                            SizedBox(
+                              height: 16,
+                              width: double.infinity,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(g['name'] as String,
+                                    maxLines: 1,
+                                    style: const TextStyle(fontSize: 12, height: 1.1, fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                            SizedBox(
+                              height: 16,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.diamond_rounded, size: 12, color: Color(0xFF67E8F9)),
+                                  Text(' ${g['price']}', style: const TextStyle(fontSize: 12, height: 1.1)),
+                                ]),
+                              ),
+                            ),
                           ]),
                         ),
                       ),
@@ -776,12 +807,12 @@ class _RoomScreenState extends State<RoomScreen> {
               opacity: fade.clamp(0.0, 1.0),
               child: Center(
                 child: Transform.scale(
-                  scale: 0.4 + 0.8 * grow,
+                  scale: 0.5 + 0.6 * grow,
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    _giftIcon(meta, 130),
+                    _giftIcon(meta, 84),
                     Text('$name  ×${meta['qty'] ?? 1}',
                         style: const TextStyle(
-                            fontSize: 20,
+                            fontSize: 15,
                             fontWeight: FontWeight.w900,
                             shadows: [Shadow(blurRadius: 8, color: Colors.black)])),
                   ]),

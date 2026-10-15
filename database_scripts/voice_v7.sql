@@ -13,7 +13,8 @@ CREATE POLICY wallets_own ON public.wallets FOR SELECT TO authenticated
   USING (user_id = auth.uid() OR public.is_admin());
 GRANT SELECT ON public.wallets TO authenticated;   -- الكتابة عبر الدوال فقط
 
-CREATE OR REPLACE FUNCTION public.my_wallet()
+DROP FUNCTION IF EXISTS public.my_wallet();
+CREATE FUNCTION public.my_wallet()
 RETURNS TABLE(gems int, ads_free boolean)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT coalesce((SELECT w.gems FROM wallets w WHERE w.user_id = auth.uid()), 0),

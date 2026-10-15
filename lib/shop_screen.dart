@@ -6,12 +6,21 @@ import 'main.dart';
 import 'theme.dart';
 
 /// رصيد المستخدم: الجواهر وحالة «بدون إعلانات».
-Future<({int gems, bool adsFree})> fetchWallet() async {
+Future<({int gems, bool adsFree, int rubyPts})> fetchWallet() async {
   final r = await supa.rpc('my_wallet') as List;
-  if (r.isEmpty) return (gems: 0, adsFree: false);
+  if (r.isEmpty) return (gems: 0, adsFree: false, rubyPts: 0);
   final m = r.first as Map;
-  return (gems: (m['gems'] as num?)?.toInt() ?? 0, adsFree: m['ads_free'] == true);
+  return (
+    gems: (m['gems'] as num?)?.toInt() ?? 0,
+    adsFree: m['ads_free'] == true,
+    rubyPts: (m['ruby_pts'] as num?)?.toInt() ?? 0,
+  );
 }
+
+/// كل 20 جوهرة مستلمة = ياقوتة، وكل ياقوتة = 10 جواهر.
+const rubyPtsPer = 20;
+const rubyToGems = 10;
+
 
 /// شريط «هل تريد التخلص من الإعلانات؟» أعلى قائمة الألعاب.
 class AdsPromo extends StatefulWidget {

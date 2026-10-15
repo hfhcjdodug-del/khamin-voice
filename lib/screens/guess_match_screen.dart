@@ -214,9 +214,17 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
   Widget _card(String label, Widget child, {Widget? note}) {
     return Expanded(
       child: Column(children: [
-        Text(label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w700)),
+        SizedBox(
+          height: 34,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Text(label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, height: 1.2, color: Colors.white70, fontWeight: FontWeight.w700)),
+          ),
+        ),
         const SizedBox(height: 6),
         AspectRatio(
           aspectRatio: 0.78,
@@ -246,12 +254,15 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
   Widget build(BuildContext context) {
     final v = _v;
     final revealedMe = v?['reveal_me'] == true;
+    // عند ظهور الكيبورد نخفي البطاقات حتى لا تدفع خانة الكتابة خارج الشاشة في الهواتف الصغيرة
+    final kb = MediaQuery.viewInsetsOf(context).bottom > 0;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _leave();
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(v?['category_name'] != null ? 'خمّن الشخصية · ${v!['category_name']}' : 'خمّن الشخصية',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
@@ -280,6 +291,7 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
                     ),
                   ]),
                 ),
+                if (!kb)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -334,7 +346,7 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
                         _connected ? _toggleSpeaker : null),
                   ]),
                 ),
-                Text(_voiceNote, style: const TextStyle(fontSize: 11, color: Colors.white54)),
+                if (!kb) Text(_voiceNote, style: const TextStyle(fontSize: 11, color: Colors.white54)),
                 const Divider(color: Colors.white12),
                 Expanded(
                   child: ListView.builder(
