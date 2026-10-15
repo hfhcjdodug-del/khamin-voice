@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../ads.dart';
 import '../main.dart';
 import '../audio.dart';
 import '../theme.dart';
@@ -70,6 +71,7 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
           ),
         );
         if (mounted) Navigator.of(context).pop();
+        showRoundEndAd();
         return;
       }
       setState(() {

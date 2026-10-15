@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'ads.dart';
 import 'config.dart';
 import 'push.dart';
 import 'screens/shell_screen.dart';
@@ -22,6 +23,7 @@ Future<void> main() async {
   ));
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   initPush();
+  initAds();
   runApp(const KhaminApp());
 }
 

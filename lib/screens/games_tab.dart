@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../ads.dart';
 import '../main.dart';
 import '../shop_screen.dart';
 import '../theme.dart';
@@ -158,6 +159,7 @@ class _GamesTabState extends State<GamesTab> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
           const AdsPromo(),
+          const AdBanner(),
           for (final inv in _invites)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
