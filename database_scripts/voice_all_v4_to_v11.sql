@@ -1365,3 +1365,11 @@ REVOKE ALL ON FUNCTION public.daily_status(), public.claim_daily(), public.missi
   public.claim_mission(uuid), public.roulette_info(), public.roulette_spin(boolean), public.log_ad_view() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.daily_status(), public.claim_daily(), public.my_missions(),
   public.claim_mission(uuid), public.roulette_info(), public.roulette_spin(boolean), public.log_ad_view() TO authenticated;
+
+-- ===== v12 =====
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS photos   text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS tags     text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS birthday date;
+
+GRANT UPDATE (photos, tags, birthday) ON public.profiles TO authenticated;
