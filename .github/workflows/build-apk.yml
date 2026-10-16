@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          flutter build apk --release 2>&1 | tee build.log
+          flutter build apk --release --split-per-abi 2>&1 | tee build.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
             msg=$( (grep -nE "rror|FAILURE|went wrong|Could not|not found|incompatible|Unsupported|e: |Execution failed" build.log || true) | head -45 | cut -c1-320 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
@@ -57,7 +57,7 @@ jobs:
       - name: Inspect APK (diagnostics)
         shell: bash
         run: |
-          APK=build/app/outputs/flutter-apk/app-release.apk
+          APK=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           out=$( {
             ls -l "$APK"
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: khamin-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
 
       - name: Publish APK as a release (direct download, no zip)
@@ -78,6 +78,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk khamin.apk
-          gh release create "build-${{ github.run_number }}" khamin.apk \
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk khamin.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk khamin-32bit.apk
+          gh release create "build-${{ github.run_number }}" khamin.apk khamin-32bit.apk \
             --title "Build ${{ github.run_number }}" --notes "APK build ${{ github.run_number }}" --latest
