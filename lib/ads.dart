@@ -8,14 +8,30 @@ import 'main.dart';
 import 'shop_screen.dart';
 import 'theme.dart';
 
-/// أرقام الوحدات الإعلانية. الحالية «تجريبية» رسمية من Google:
-/// بدّلها بأرقامك من AdMob قبل النشر على Google Play.
+/// الوحدات الإعلانية الحقيقية (AdMob → نتونس).
+const _realBanner = 'ca-app-pub-7583984100644242/3277191524'; // games_banner
+const _realInterstitial = 'ca-app-pub-7583984100644242/5997442374'; // round_end
+const _realRewarded = 'ca-app-pub-7583984100644242/9637304481'; // reward_gift
+
+/// وحدات Google التجريبية: يستعملها المدير (صاحب التطبيق) دائماً
+/// حتى لا يضغط على إعلان حقيقي بالخطأ فيُحظر حسابه في AdMob.
 const _testBanner = 'ca-app-pub-3940256099942544/6300978111';
 const _testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
-const String bannerUnitId = _testBanner; // ← games_banner
-const String interstitialUnitId = _testInterstitial; // ← round_end
 const _testRewarded = 'ca-app-pub-3940256099942544/5224354917';
-const String rewardedUnitId = _testRewarded; // ← rewards
+
+bool? _testMode;
+
+Future<bool> _useTest() async {
+  if (_testMode != null) return _testMode!;
+  try {
+    _testMode = (await supa.rpc('am_i_admin')) == true;
+  } catch (_) {
+    return true; // عند الشك نستعمل التجريبي (أأمن)، ولا نخزّن النتيجة
+  }
+  return _testMode!;
+}
+
+Future<String> _unit(String real, String test) async => (await _useTest()) ? test : real;
 
 bool _ready = false;
 bool? _adsFree;
@@ -42,10 +58,11 @@ Future<bool> adsFree({bool refresh = false}) async {
   return _adsFree!;
 }
 
-void _loadInter() {
+Future<void> _loadInter() async {
   if (!_ready) return;
+  final id = await _unit(_realInterstitial, _testInterstitial);
   InterstitialAd.load(
-    adUnitId: interstitialUnitId,
+    adUnitId: id,
     request: const AdRequest(),
     adLoadCallback: InterstitialAdLoadCallback(
       onAdLoaded: (a) => _inter = a,
@@ -99,7 +116,7 @@ class _AdBannerState extends State<AdBanner> {
   Future<void> _init() async {
     if (!_ready || await adsFree()) return;
     final ad = BannerAd(
-      adUnitId: bannerUnitId,
+      adUnitId: await _unit(_realBanner, _testBanner),
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
@@ -148,8 +165,9 @@ Future<bool> watchRewardedAd(BuildContext context) async {
   }
   final done = Completer<bool>();
   var earned = false;
+  final rewardedId = await _unit(_realRewarded, _testRewarded);
   RewardedAd.load(
-    adUnitId: rewardedUnitId,
+    adUnitId: rewardedId,
     request: const AdRequest(),
     rewardedAdLoadCallback: RewardedAdLoadCallback(
       onAdLoaded: (ad) {
