@@ -160,6 +160,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (widget.seed != null) {
       _p = widget.seed;
       _loading = false;
+      _extra = {
+        for (final k in const ['photos', 'tags', 'birthday'])
+          if (widget.seed!.containsKey(k)) k: widget.seed![k]
+      };
+      if (widget.seed!['live'] is Map) _live = Map<String, dynamic>.from(widget.seed!['live'] as Map);
     }
     _load();
     _loadExtra();

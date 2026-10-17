@@ -60,6 +60,29 @@ void main() {
       }
     });
   }
+  testWidgets('profile ME full', (t) async {
+    final me = {
+      ...prof,
+      'photos': ['http://x/1.jpg', 'http://x/2.jpg', 'http://x/3.jpg', 'http://x/4.jpg'],
+      'tags': ['ودود', 'مرح'],
+      'birthday': '2003-05-04',
+      'live': {'id': 'r', 'title': 'روم', 'topic': '', 'host_id': 'u', 'is_live': true},
+      'cover_url': 'http://x/cover.jpg',
+      'avatar_url': 'http://x/av.jpg',
+      'vip_start': '2026-09-01T00:00:00Z',
+      'vip_end': '2026-12-01T00:00:00Z',
+    };
+    await run(t, ProfileScreen(userId: '', embedded: true, seed: me), 'ProfileMe');
+    for (final label in ['المنشورات', 'الشرف', 'العلاقة', 'الملف الشخصي']) {
+      final f = find.text(label);
+      if (f.evaluate().isNotEmpty) {
+        await t.tap(f.first);
+        await t.pump(const Duration(milliseconds: 300));
+        // ignore: avoid_print
+        print('SMOKE-OK me tab $label exception=${t.takeException()}');
+      }
+    }
+  });
   testWidgets('rooms loaded', (t) async {
     final rooms = [
       for (var i = 0; i < 12; i++)
