@@ -7,6 +7,7 @@ import '../main.dart';
 import 'rewards_screen.dart';
 import '../shop_screen.dart';
 import '../theme.dart';
+import 'farm_screen.dart';
 import 'guess_lobby_screen.dart';
 import 'guess_match_screen.dart';
 
@@ -32,6 +33,15 @@ const _games = [
     Icons.face_retouching_natural_rounded,
     [Color(0xFF7C3AED), Color(0xFFEC4899)],
     ['لاعبان', 'صوت'],
+    ready: true,
+  ),
+  _GameDef(
+    'farm',
+    'المزرعة',
+    'عجلة الأكل: راهن بجواهرك واربح',
+    Icons.agriculture_rounded,
+    [Color(0xFF16A34A), Color(0xFFFACC15)],
+    ['جماعية', 'جواهر'],
     ready: true,
   ),
   _GameDef(
@@ -146,6 +156,10 @@ class _GamesTabState extends State<GamesTab> {
   void _open(_GameDef g) {
     if (!g.ready) {
       toast(context, 'قريباً... ${g.title}');
+      return;
+    }
+    if (g.id == 'farm') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const FarmScreen()));
       return;
     }
     Navigator.push(

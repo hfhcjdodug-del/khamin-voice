@@ -68,7 +68,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 11,
+      length: 12,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -87,6 +87,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'الهدايا'),
               Tab(text: 'المهام'),
               Tab(text: 'الخلفيات'),
+              Tab(text: 'المزرعة'),
             ],
           ),
         ),
@@ -102,6 +103,7 @@ class AdminScreen extends StatelessWidget {
           _GiftsAdminTab(),
           _MissionsAdminTab(),
           _BackgroundsAdminTab(),
+          _FarmAdminTab(),
         ]),
       ),
     );
@@ -2176,5 +2178,100 @@ class _BackgroundsAdminTabState extends State<_BackgroundsAdminTab> {
                   },
                 ),
     );
+  }
+}
+
+
+class _FarmAdminTab extends StatefulWidget {
+  const _FarmAdminTab();
+
+  @override
+  State<_FarmAdminTab> createState() => _FarmAdminTabState();
+}
+
+class _FarmAdminTabState extends State<_FarmAdminTab> {
+  final _vals = <String, String>{};
+  bool _loading = true;
+
+  static const _fields = {
+    'farm_min_bet': ('أقل رهان (جواهر)', '10'),
+    'farm_max_bet': ('أعلى رهان للجولة', '1000'),
+    'farm_daily_limit': ('الحد اليومي لكل لاعب', '20000'),
+    'farm_payout_pct': ('نسبة الدفع % (أقل = ربح أقل للاعب)', '90'),
+    'farm_round_secs': ('مدة الجولة بالثواني (10 إلى 120)', '25'),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('app_settings').select().inFilter('key', ['farm_enabled', ..._fields.keys]);
+      for (final m in r as List) {
+        _vals[m['key'] as String] = (m['value'] ?? '') as String;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _save(String k, String v) async {
+    try {
+      await _setSetting(k, v);
+      setState(() => _vals[k] = v);
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _editField(String k) async {
+    final t = await _askText(context, _fields[k]!.$1, _vals[k] ?? _fields[k]!.$2, max: 8);
+    if (t == null) return;
+    final n = int.tryParse(t);
+    if (n == null || n < 0) {
+      if (mounted) toast(context, 'اكتب رقماً صحيحاً');
+      return;
+    }
+    await _save(k, '$n');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    final on = _vals['farm_enabled'] == '1';
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      GlassCard(
+        child: SwitchListTile(
+          title: const Text('تشغيل لعبة المزرعة', style: TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(on ? 'مفعّلة: تظهر للاعبين وتعمل الجولات' : 'متوقفة (الوضع الافتراضي)'),
+          value: on,
+          onChanged: (v) => _save('farm_enabled', v ? '1' : '0'),
+        ),
+      ),
+      const SizedBox(height: 10),
+      for (final e in _fields.entries)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: GlassCard(
+            child: ListTile(
+              title: Text(e.value.$1),
+              trailing: Text(_vals[e.key] ?? e.value.$2,
+                  style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF67E8F9), fontSize: 16)),
+              onTap: () => _editField(e.key),
+            ),
+          ),
+        ),
+      const Padding(
+        padding: EdgeInsets.all(8),
+        child: Text(
+          'ملاحظة: النتيجة والدفع يحدثان في الخادم فقط، ولا يستطيع اللاعب التأثير عليهما. '
+          'الاحتمال يتناسب عكسياً مع المضاعف، ومع نسبة دفع 90% يكون متوسط ما يعود للاعب نحو 87% مما راهن به. '
+          'الجواهر هنا تُشترى بمال حقيقي، فاضبط الحدود بحذر، وراجع قوانين المتاجر (غوغل بلاي يقيّد ألعاب الحظ بالمال).',
+          style: TextStyle(fontSize: 12, color: Colors.white60, height: 1.6),
+        ),
+      ),
+    ]);
   }
 }
