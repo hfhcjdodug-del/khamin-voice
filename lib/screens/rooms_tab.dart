@@ -152,7 +152,8 @@ Future<void> createRoomFlow(BuildContext context) async {
 
 class RoomsTab extends StatefulWidget {
   final bool active;
-  const RoomsTab({super.key, this.active = true});
+  final List<Map<String, dynamic>>? seed; // للاختبار فقط
+  const RoomsTab({super.key, this.active = true, this.seed});
 
   @override
   State<RoomsTab> createState() => _RoomsTabState();
@@ -172,6 +173,11 @@ class _RoomsTabState extends State<RoomsTab> {
   @override
   void initState() {
     super.initState();
+    if (widget.seed != null) {
+      _rooms = widget.seed!;
+      _loading = false;
+      return;
+    }
     _load();
     _timer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (widget.active) _load(silent: true);

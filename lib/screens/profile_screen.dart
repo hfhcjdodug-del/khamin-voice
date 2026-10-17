@@ -29,7 +29,8 @@ const _violet = Color(0xFF8B5CF6);
 class ProfileScreen extends StatefulWidget {
   final String userId;
   final bool embedded;
-  const ProfileScreen({super.key, required this.userId, this.embedded = false});
+  final Map<String, dynamic>? seed; // للاختبار فقط
+  const ProfileScreen({super.key, required this.userId, this.embedded = false, this.seed});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -156,6 +157,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.seed != null) {
+      _p = widget.seed;
+      _loading = false;
+    }
     _load();
     _loadExtra();
     _loadWallet();
