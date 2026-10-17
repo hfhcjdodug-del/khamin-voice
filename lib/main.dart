@@ -11,7 +11,7 @@ import 'screens/sign_in_screen.dart';
 import 'theme.dart';
 
 SupabaseClient get supa => Supabase.instance.client;
-String get myId => supa.auth.currentUser!.id;
+String get myId => supa.auth.currentUser?.id ?? '';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

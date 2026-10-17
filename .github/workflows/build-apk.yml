@@ -40,6 +40,16 @@ jobs:
           errs=$( (grep -E "^\s*error" analyze.log || true) | head -40 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::warning title=analyze-errors::count=$( (grep -cE '^\s*error' analyze.log || true) ) ${errs}"
 
+      - name: Smoke test first frames (does not block the build)
+        shell: bash
+        run: |
+          timeout 240 flutter test --timeout 60s test/shell_smoke_test.dart > smoke.log 2>&1
+          code=$?
+          msg=$( (grep -E "SMOKE-OK|Exception|Error|error|Some tests failed|All tests passed|TimeoutException|timed out|Test timed out|\\[E\\]" smoke.log || true) | head -30 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          tl=$(tail -15 smoke.log | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=smoke-test::exit=$code ${msg} --- ${tl}"
+        continue-on-error: true
+
       - name: Build APK
         shell: bash
         run: |
