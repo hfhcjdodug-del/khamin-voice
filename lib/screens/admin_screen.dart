@@ -24,6 +24,23 @@ Future<String> _uploadImage(XFile f, String folder) async {
 }
 
 
+/// يختار ملف هدية (صورة/GIF/WebP متحرك/Lottie JSON) ويرفعه كما هو دون ضغط حتى لا تضيع الحركة.
+Future<String?> _pickGiftFile() async {
+  final r = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'json'],
+    withData: true,
+  );
+  if (r == null || r.files.isEmpty) return null;
+  final f = r.files.first;
+  final bytes = f.bytes;
+  if (bytes == null) throw 'تعذّر قراءة الملف';
+  if (bytes.length > 4 * 1024 * 1024) throw 'الملف أكبر من 4 ميغا';
+  final ext = extOf(f.name, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'json'], 'png');
+  final ct = ext == 'json' ? 'application/json' : 'image/${ext == 'jpg' ? 'jpeg' : ext}';
+  return uploadMedia(bucket: 'game-media', folder: 'gifts', bytes: bytes, ext: ext, contentType: ct);
+}
+
 Future<String?> _askText(BuildContext context, String title, String initial, {int max = 40}) async {
   final c = TextEditingController(text: initial);
   final ok = await showDialog<bool>(
@@ -1668,30 +1685,62 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
     final name = TextEditingController(text: (g?['name'] ?? '') as String);
     final price = TextEditingController(text: g == null ? '' : '${g['price']}');
     final emoji = TextEditingController(text: (g?['emoji'] ?? '🎁') as String);
+    String? fileUrl = g?['image_url'] as String?;
+    var picking = false;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (d) => AlertDialog(
-        title: Text(g == null ? 'هدية جديدة' : 'تعديل الهدية'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'الاسم')),
-          const SizedBox(height: 8),
-          TextField(
-              controller: price,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'السعر بالجواهر')),
-          const SizedBox(height: 8),
-          TextField(controller: emoji, decoration: const InputDecoration(labelText: 'رمز بديل (إيموجي)')),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حفظ')),
-        ],
+      builder: (d) => StatefulBuilder(
+        builder: (d, setS) => AlertDialog(
+          title: Text(g == null ? 'هدية جديدة' : 'تعديل الهدية'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'الاسم')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: price,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'السعر بالجواهر')),
+              const SizedBox(height: 8),
+              TextField(controller: emoji, decoration: const InputDecoration(labelText: 'رمز بديل (إيموجي)')),
+              const SizedBox(height: 12),
+              GiftImage(image: fileUrl, emoji: emoji.text.isEmpty ? '🎁' : emoji.text, size: 80),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: picking
+                    ? null
+                    : () async {
+                        setS(() => picking = true);
+                        try {
+                          final u = await _pickGiftFile();
+                          if (u != null) fileUrl = u;
+                        } catch (e) {
+                          if (mounted) toast(context, friendlyError(e));
+                        }
+                        setS(() => picking = false);
+                      },
+                icon: const Icon(Icons.upload_file_rounded),
+                label: Text(picking ? 'جارٍ الرفع…' : 'رفع ملف (صورة / GIF / WebP / Lottie)'),
+              ),
+              const Text('ملفات Lottie (.json) و GIF تتحرك داخل الغرفة',
+                  style: TextStyle(fontSize: 11, color: Colors.white54)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: picking ? null : () => Navigator.pop(d, true), child: const Text('حفظ')),
+          ],
+        ),
       ),
     );
     final pr = int.tryParse(price.text.trim());
     if (ok != true || name.text.trim().isEmpty || pr == null || pr < 1) return;
     try {
-      final vals = {'name': name.text.trim(), 'price': pr, 'emoji': emoji.text.trim().isEmpty ? '🎁' : emoji.text.trim()};
+      final vals = {
+        'name': name.text.trim(),
+        'price': pr,
+        'emoji': emoji.text.trim().isEmpty ? '🎁' : emoji.text.trim(),
+        'image_url': fileUrl,
+      };
       if (g == null) {
         await supa.from('gifts').insert({...vals, 'sort': _gifts.length + 1});
       } else {
@@ -1704,13 +1753,12 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
   }
 
   Future<void> _image(Map<String, dynamic> g) async {
-    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 600, imageQuality: 90);
-    if (f == null) return;
     try {
-      final url = await _uploadImage(f, 'gifts');
+      final url = await _pickGiftFile();
+      if (url == null) return;
       await supa.from('gifts').update({'image_url': url}).eq('id', g['id']);
       await _load();
-      if (mounted) toast(context, 'تم تغيير صورة الهدية');
+      if (mounted) toast(context, 'تم تغيير ملف الهدية');
     } catch (e) {
       if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
     }
@@ -1726,6 +1774,18 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
   }
 
   Future<void> _del(Map<String, dynamic> g) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('حذف «${g['name']}»؟'),
+        content: const Text('تُحذف الهدية نهائياً. لإخفائها فقط استعمل المفتاح.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (yes != true) return;
     try {
       await supa.from('gifts').delete().eq('id', g['id']);
       await _load();
@@ -1773,7 +1833,7 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
                       },
                       itemBuilder: (_) => const [
                         PopupMenuItem(value: 'edit', child: Text('تعديل الاسم والسعر')),
-                        PopupMenuItem(value: 'img', child: Text('تغيير الصورة')),
+                        PopupMenuItem(value: 'img', child: Text('تغيير الملف (صورة/متحركة)')),
                         PopupMenuItem(value: 'noimg', child: Text('استخدام الرمز بدل الصورة')),
                         PopupMenuItem(value: 'del', child: Text('حذف')),
                       ],
