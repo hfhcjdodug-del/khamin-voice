@@ -15,6 +15,8 @@ import '../room_look.dart';
 import '../shop_screen.dart';
 import '../songs.dart';
 import '../theme.dart';
+import '../widgets/trend_frame.dart';
+import 'chat_screen.dart';
 import 'profile_screen.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -532,6 +534,8 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
+  int get _micCount => (_look['mic_count'] as num?)?.toInt() ?? 8;
+
   Future<void> _toggleLock() async {
     final locked = _look['locked'] == true;
     final ctrl = TextEditingController();
@@ -734,26 +738,23 @@ class _RoomScreenState extends State<RoomScreen> {
         return SafeArea(
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const SizedBox(height: 14),
-              Avatar(name: name, url: prof?['avatar_url'] as String?, size: 60),
-              const SizedBox(height: 6),
-              Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                LevelBadge(level: lv, size: 30),
-                const SizedBox(width: 6),
-                TitleImage(level: lv, height: 30),
-              ]),
-              Text(role == 'owner' ? 'صاحب الغرفة' : (role == 'mod' ? 'مشرف' : 'عضو'),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              _UserCard(
+                uid: uid,
+                name: name,
+                avatarUrl: prof?['avatar_url'] as String?,
+                level: lv,
+                roleText: role == 'owner' ? 'صاحب الغرفة' : (role == 'mod' ? 'مشرف' : 'عضو'),
+                framed: uid == _hostId && _trending,
+                mine: mine,
+                onProfile: () => done(() => _openProfile(uid)),
+                onGift: () => done(() => _giftSheet(to: uid)),
+                onChat: () => done(() => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                            peerId: uid, peerName: name, peerAvatar: prof?['avatar_url'] as String?)))),
+              ),
               const Divider(color: Colors.white12),
-              _sheetAction(Icons.person_rounded, 'عرض الملف الشخصي', '',
-                  () => done(() => _openProfile(uid))),
-              if (!mine)
-                _sheetAction(Icons.card_giftcard_rounded, 'إهداء هدية',
-                    uid == _hostId ? 'دعم صاحب الغرفة يرفع الروم إلى الترند' : '',
-                    () => done(() => _giftSheet(to: uid)),
-                    color: const Color(0xFFFDE68A)),
               if (mine && seat > 0)
                 _sheetAction(Icons.mic_off_rounded, 'النزول من المايك', '',
                     () => done(_leaveSeat),
@@ -1129,6 +1130,124 @@ class _RoomScreenState extends State<RoomScreen> {
     } catch (e) {
       if (mounted) toast(context, friendlyError(e));
     }
+  }
+
+  Future<void> _renameRoom() async {
+    final t = TextEditingController(text: (_look['title'] ?? widget.title) as String);
+    final tp = TextEditingController(text: (_look['topic'] ?? widget.topic) as String);
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(c).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('تعديل اسم الروم', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          TextField(controller: t, maxLength: 60, decoration: const InputDecoration(labelText: 'اسم الروم')),
+          TextField(
+              controller: tp,
+              maxLength: 120,
+              decoration: const InputDecoration(labelText: 'الموضوع (اختياري)')),
+          const SizedBox(height: 8),
+          SizedBox(width: double.infinity, child: GradButton(label: 'حفظ', onPressed: () => Navigator.pop(c, true))),
+        ]),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await supa.rpc('room_rename', params: {'p_room': widget.roomId, 'p_title': t.text, 'p_topic': tp.text});
+      if (mounted) toast(context, 'تم تعديل الاسم');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _micModeSheet() async {
+    final n = await showModalBottomSheet<int>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('عدد المايكات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          ),
+          for (final k in const [2, 8, 12])
+            ListTile(
+              leading: Icon(Icons.mic_rounded, color: _micCount == k ? C.pink : Colors.white54),
+              title: Text('مقعد المضيف + $k ضيوف'),
+              subtitle: k == 8 ? const Text('الافتراضي', style: TextStyle(fontSize: 12)) : null,
+              trailing: _micCount == k ? const Icon(Icons.check_circle_rounded, color: C.green) : null,
+              onTap: () => Navigator.pop(c, k),
+            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 14),
+            child: Text('عند تقليل العدد يُنزَل من يجلس على المقاعد المحذوفة',
+                style: TextStyle(fontSize: 12, color: Colors.white54)),
+          ),
+        ]),
+      ),
+    );
+    if (n == null || n == _micCount) return;
+    try {
+      await supa.rpc('set_room_mic_count', params: {'p_room': widget.roomId, 'p_count': n});
+      if (mounted) toast(context, 'تم تغيير عدد المايكات');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _toolsSheet() async {
+    Widget tile(IconData i, String label, VoidCallback f, {Color? color}) => InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.pop(context);
+            f();
+          },
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(16)),
+              child: Icon(i, color: color ?? Colors.white),
+            ),
+            const SizedBox(height: 6),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+          ]),
+        );
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('أدوات الروم', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 14),
+            GridView.count(
+              crossAxisCount: 4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.85,
+              children: [
+                tile(Icons.edit_rounded, 'اسم الروم', _renameRoom),
+                tile(Icons.mic_external_on_rounded, 'المايكات', _micModeSheet),
+                tile(Icons.wallpaper_rounded, 'الخلفية', _settingsSheet),
+                tile(_look['locked'] == true ? Icons.lock_rounded : Icons.lock_open_rounded,
+                    'كلمة السر', _toggleLock,
+                    color: _look['locked'] == true ? const Color(0xFFFDE68A) : null),
+                tile(Icons.library_music_rounded, 'الموسيقى', _musicSheet),
+                tile(_roomMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                    _roomMuted ? 'تشغيل الصوت' : 'كتم الروم', _toggleRoomMute),
+                tile(Icons.power_settings_new_rounded, 'إنهاء الروم', _endRoom,
+                    color: const Color(0xFFFF6B6B)),
+              ],
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<void> _settingsSheet() async {
@@ -1644,8 +1763,8 @@ class _RoomScreenState extends State<RoomScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                    if (widget.topic.isNotEmpty)
-                      Text(widget.topic,
+                    if (((_look['topic'] ?? widget.topic) as String).isNotEmpty)
+                      Text((_look['topic'] ?? widget.topic) as String,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 11, color: Colors.white70)),
@@ -1680,8 +1799,9 @@ class _RoomScreenState extends State<RoomScreen> {
                   ),
                 if (_iAmOwner)
                   IconButton(
-                    onPressed: _settingsSheet,
-                    icon: const Icon(Icons.settings_rounded),
+                    tooltip: 'أدوات الروم',
+                    onPressed: _toolsSheet,
+                    icon: const Icon(Icons.dashboard_customize_rounded),
                   ),
               ]),
             ),
@@ -1702,11 +1822,11 @@ class _RoomScreenState extends State<RoomScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: GridView.count(
-                      crossAxisCount: 4,
+                      crossAxisCount: _micCount == 2 ? 2 : 4,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 0.9,
-                      children: [for (var n = 1; n <= 8; n++) Center(child: _seat(n))],
+                      childAspectRatio: _micCount == 2 ? 1.8 : 0.9,
+                      children: [for (var n = 1; n <= _micCount; n++) Center(child: _seat(n))],
                     ),
                   ),
                   _audience(),
@@ -1727,6 +1847,135 @@ class _RoomScreenState extends State<RoomScreen> {
         ),
         _giftOverlay(),
         _bcastBanner(),
+      ]),
+    );
+  }
+}
+
+
+/// بطاقة المستخدم داخل الروم: صورة بإطار (للترند)، الاسم، متابعون، عمر، رتبة، ألقاب، وأزرار سريعة.
+class _UserCard extends StatefulWidget {
+  final String uid, name, roleText;
+  final String? avatarUrl;
+  final int level;
+  final bool framed, mine;
+  final VoidCallback onProfile, onGift, onChat;
+  const _UserCard({
+    required this.uid,
+    required this.name,
+    required this.roleText,
+    required this.avatarUrl,
+    required this.level,
+    required this.framed,
+    required this.mine,
+    required this.onProfile,
+    required this.onGift,
+    required this.onChat,
+  });
+
+  @override
+  State<_UserCard> createState() => _UserCardState();
+}
+
+class _UserCardState extends State<_UserCard> {
+  Map<String, dynamic> _d = {};
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    () async {
+      try {
+        final r = await supa.rpc('get_profile', params: {'p_id': widget.uid}) as List;
+        if (r.isNotEmpty && mounted) setState(() => _d = Map<String, dynamic>.from(r.first as Map));
+      } catch (_) {}
+    }();
+  }
+
+  Future<void> _follow() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final f = _d['is_following'] == true;
+    try {
+      await supa.rpc(f ? 'unfollow_user' : 'follow_user', params: {'p_id': widget.uid});
+      _d['is_following'] = !f;
+      _d['followers'] = ((_d['followers'] as num?)?.toInt() ?? 0) + (f ? -1 : 1);
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Widget _chip(String t, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        decoration: BoxDecoration(color: c.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(12)),
+        child: Text(t, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = Avatar(name: widget.name, url: widget.avatarUrl, size: 72);
+    final age = (_d['age'] as num?)?.toInt();
+    final followers = (_d['followers'] as num?)?.toInt();
+    final following = _d['is_following'] == true;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        GestureDetector(
+          onTap: widget.onProfile,
+          child: widget.framed
+              ? TrendFrame(size: 72, child: ClipOval(child: avatar))
+              : ClipOval(child: avatar),
+        ),
+        const SizedBox(height: 8),
+        Text(widget.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 4),
+        Text(followers == null ? ' ' : '$followers متابع',
+            style: const TextStyle(fontSize: 12, color: Colors.white60)),
+        const SizedBox(height: 8),
+        Wrap(alignment: WrapAlignment.center, spacing: 6, runSpacing: 6, children: [
+          if (age != null) _chip('🎂 $age', const Color(0xFF67E8F9)),
+          _chip(widget.roleText, widget.roleText == 'عضو' ? Colors.white70 : const Color(0xFFFDE68A)),
+          if (_d['verified'] == true) _chip('موثّق ✓', const Color(0xFF60A5FA)),
+        ]),
+        const SizedBox(height: 8),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          LevelBadge(level: widget.level, size: 30),
+          const SizedBox(width: 6),
+          TitleImage(level: widget.level, height: 30),
+        ]),
+        const SizedBox(height: 12),
+        if (!widget.mine)
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _busy || _d.isEmpty ? null : _follow,
+                icon: Icon(following ? Icons.check_rounded : Icons.person_add_alt_1_rounded, size: 18),
+                label: Text(following ? 'تتابعه' : 'متابعة'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: widget.onGift,
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xFFF59E0B)),
+                icon: const Icon(Icons.card_giftcard_rounded, size: 18),
+                label: const Text('هدية'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: widget.onChat,
+                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                label: const Text('مراسلة'),
+              ),
+            ),
+          ])
+        else
+          SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(onPressed: widget.onProfile, child: const Text('عرض ملفي'))),
       ]),
     );
   }
