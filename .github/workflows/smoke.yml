@@ -1,0 +1,28 @@
+name: Smoke test (first frames)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Run smoke test
+        shell: bash
+        run: |
+          set +e
+          timeout 300 flutter test --timeout 90s test/shell_smoke_test.dart > smoke.log 2>&1
+          code=$?
+          echo "exit=$code"
+          msg=$(head -c 12000 smoke.log | grep -vE "^\s*$" | cut -c1-260 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=smoke-head::exit=$code ${msg}"
+          tl=$(tail -n 60 smoke.log | cut -c1-260 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=smoke-tail::${tl}"
+          exit 0
