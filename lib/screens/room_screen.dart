@@ -202,6 +202,11 @@ class _RoomScreenState extends State<RoomScreen> {
       }
     } catch (e) {
       if (e.toString().contains('kicked')) _handleKicked();
+      if (e.toString().contains('room locked') && mounted && !_closed) {
+        _closed = true;
+        toast(context, 'الروم مقفلة 🔒 ادخل بكلمة السر');
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -528,12 +533,42 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   Future<void> _toggleLock() async {
-    final lock = _look['locked'] != true;
+    final locked = _look['locked'] == true;
+    final ctrl = TextEditingController();
+    final res = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(locked ? 'الروم مقفلة 🔒' : 'قفل الروم بكلمة سر'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(locked
+              ? 'اكتب كلمة سر جديدة لتغييرها، أو افتح الروم للجميع'
+              : 'اكتب كلمة سر (4 إلى 16 حرفاً). من يحاول الدخول سيُطلب منه كتابتها'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: ctrl,
+            maxLength: 16,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(labelText: 'كلمة السر', counterText: ''),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
+          if (locked) TextButton(onPressed: () => Navigator.pop(c, ''), child: const Text('فتح الروم')),
+          TextButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (res == null) return;
+    if (res.isNotEmpty && (res.length < 4 || res.length > 16)) {
+      if (mounted) toast(context, 'كلمة السر من 4 إلى 16 حرفاً');
+      return;
+    }
+    if (res.isEmpty && !locked) return;
     try {
-      await supa.rpc('set_room_locked', params: {'p_room': widget.roomId, 'p_locked': lock});
+      await supa.rpc('set_room_password', params: {'p_room': widget.roomId, 'p_pass': res.isEmpty ? null : res});
       if (mounted) {
-        setState(() => _look['locked'] = lock);
-        toast(context, lock ? 'تم قفل الروم 🔒 لن يدخلها أحد جديد' : 'تم فتح الروم 🔓');
+        setState(() => _look['locked'] = res.isNotEmpty);
+        toast(context, res.isNotEmpty ? 'تم قفل الروم 🔒' : 'تم فتح الروم 🔓');
       }
     } catch (e) {
       if (mounted) toast(context, friendlyError(e));

@@ -57,6 +57,13 @@ Deno.serve(async (req) => {
     if (roomId) {
       const rooms = await rest(`rooms?id=eq.${encodeURIComponent(roomId)}&select=id,is_live`);
       if (!Array.isArray(rooms) || rooms.length === 0 || !rooms[0].is_live) return json({ error: "room not live" }, 404);
+      // الروم المقفلة بكلمة سر: لا توكن إلا لمن أدخلها (أو المضيف)
+      const can = await fetch(`${supaUrl}/rest/v1/rpc/can_enter_room`, {
+        method: "POST",
+        headers: { Authorization: auth, apikey: anon, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_room: roomId }),
+      }).then((r) => r.json()).catch(() => null);
+      if (can === false) return json({ error: "room locked" }, 403);
       lkRoom = roomId;
     } else {
       // اللاعب يجب أن يكون طرفاً في مباراة نشطة

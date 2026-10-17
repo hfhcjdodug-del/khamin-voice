@@ -8,7 +8,80 @@ import '../songs.dart';
 import '../theme.dart';
 import 'room_screen.dart';
 
+/// يسأل عن كلمة سر الروم المقفلة. يرجع true إذا سُمح بالدخول.
+Future<bool> _askRoomPassword(BuildContext context, String roomId) async {
+  final ctrl = TextEditingController();
+  String? err;
+  bool busy = false;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setS) => AlertDialog(
+        title: const Text('الروم مقفلة 🔒'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('اكتب كلمة السر للدخول'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            obscureText: true,
+            maxLength: 16,
+            textDirection: TextDirection.ltr,
+            decoration: InputDecoration(counterText: '', errorText: err),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: busy
+                ? null
+                : () async {
+                    setS(() => busy = true);
+                    try {
+                      final res = await supa.rpc('join_room_with_password',
+                          params: {'p_room': roomId, 'p_pass': ctrl.text});
+                      if (res == 'ok') {
+                        if (c.mounted) Navigator.pop(c, true);
+                        return;
+                      }
+                      setS(() {
+                        busy = false;
+                        if (res == 'blocked') {
+                          err = 'محاولات كثيرة، انتظر 10 دقائق';
+                        } else {
+                          final n = res.toString().split(':').last;
+                          err = 'كلمة السر خطأ (متبقي $n محاولات)';
+                        }
+                      });
+                    } catch (e) {
+                      setS(() {
+                        busy = false;
+                        err = friendlyError(e);
+                      });
+                    }
+                  },
+            child: const Text('دخول'),
+          ),
+        ],
+      ),
+    ),
+  );
+  return ok == true;
+}
+
 Future<void> openRoom(BuildContext context, Map<String, dynamic> r) async {
+  if (r['host_id'] != myId) {
+    try {
+      final can = await supa.rpc('can_enter_room', params: {'p_room': r['id']});
+      if (can == false) {
+        if (!context.mounted) return;
+        if (!await _askRoomPassword(context, r['id'] as String)) return;
+      }
+    } catch (_) {
+      // قاعدة قديمة بلا v13: نكمل كالسابق
+    }
+  }
+  if (!context.mounted) return;
   await Navigator.push(
     context,
     MaterialPageRoute(
