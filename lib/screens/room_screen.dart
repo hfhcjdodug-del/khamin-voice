@@ -1136,11 +1136,52 @@ class _RoomScreenState extends State<RoomScreen> {
     var bgUrl = _look['bg_url'] as String?;
     var skin = (_look['mic_skin'] ?? 'none') as String;
     var skinUrl = _look['mic_skin_url'] as String?;
+    var catalog = <Map<String, dynamic>>[];
+    final owned = <String>{};
+    try {
+      catalog = List<Map<String, dynamic>>.from(
+          await supa.from('room_backgrounds').select().eq('active', true).order('sort'));
+      final o = await supa.from('user_backgrounds').select('bg_id').eq('user_id', myId);
+      for (final r in o as List) {
+        owned.add(r['bg_id'] as String);
+      }
+    } catch (_) {
+      // قاعدة بلا v14: لا كتالوج
+    }
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (c) => StatefulBuilder(
         builder: (c, setS) {
+          Future<void> pickCatalog(Map<String, dynamic> b) async {
+            final id = b['id'] as String;
+            final price = (b['price'] as num).toInt();
+            if (price > 0 && !owned.contains(id)) {
+              final yes = await showDialog<bool>(
+                context: context,
+                builder: (d) => AlertDialog(
+                  title: Text('شراء «${b['name']}»'),
+                  content: Text('السعر $price جوهرة، تشتريها مرة واحدة وتبقى لك.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+                    FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('شراء')),
+                  ],
+                ),
+              );
+              if (yes != true) return;
+              try {
+                await supa.rpc('buy_room_background', params: {'p_bg': id});
+                owned.add(id);
+              } catch (e) {
+                if (mounted) toast(context, friendlyError(e));
+                return;
+              }
+            }
+            setS(() => bgUrl = b['image_url'] as String);
+            await _saveLook(bg, bgUrl, skin, skinUrl);
+          }
+
           Widget upTile(String label, String? url, Future<void> Function() onTap) => GestureDetector(
                 onTap: onTap,
                 child: Container(
@@ -1181,6 +1222,37 @@ class _RoomScreenState extends State<RoomScreen> {
                         await _saveLook(bg, bgUrl, skin, skinUrl);
                       }
                     }),
+                    for (final b in catalog)
+                      GestureDetector(
+                        onTap: () => pickCatalog(b),
+                        child: Container(
+                          width: 70,
+                          height: 70,
+                          margin: const EdgeInsetsDirectional.only(end: 8),
+                          alignment: Alignment.bottomCenter,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            image: DecorationImage(image: NetworkImage(b['image_url'] as String), fit: BoxFit.cover),
+                            border: Border.all(
+                                color: bgUrl == b['image_url'] ? Colors.white : Colors.white24,
+                                width: bgUrl == b['image_url'] ? 2.5 : 1),
+                          ),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.vertical(bottom: Radius.circular(13))),
+                            child: Text(
+                              (b['price'] as num) == 0
+                                  ? 'مجانية'
+                                  : owned.contains(b['id']) ? 'مملوكة' : '💎 ${b['price']}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 10, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
                     for (final pr in roomBgPresets)
                       GestureDetector(
                         onTap: () {

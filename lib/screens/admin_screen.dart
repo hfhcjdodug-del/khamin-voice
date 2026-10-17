@@ -68,7 +68,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 10,
+      length: 11,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -86,6 +86,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'المدفوعات'),
               Tab(text: 'الهدايا'),
               Tab(text: 'المهام'),
+              Tab(text: 'الخلفيات'),
             ],
           ),
         ),
@@ -100,6 +101,7 @@ class AdminScreen extends StatelessWidget {
           _PaymentsAdminTab(),
           _GiftsAdminTab(),
           _MissionsAdminTab(),
+          _BackgroundsAdminTab(),
         ]),
       ),
     );
@@ -1984,5 +1986,195 @@ class _MissionsAdminTabState extends State<_MissionsAdminTab> {
           ),
         ),
     ]);
+  }
+}
+
+
+class _BackgroundsAdminTab extends StatefulWidget {
+  const _BackgroundsAdminTab();
+
+  @override
+  State<_BackgroundsAdminTab> createState() => _BackgroundsAdminTabState();
+}
+
+class _BackgroundsAdminTabState extends State<_BackgroundsAdminTab> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('room_backgrounds').select().order('sort').order('created_at');
+      if (!mounted) return;
+      setState(() {
+        _items = List<Map<String, dynamic>>.from(r);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      toast(context, 'نفّذ voice_v14.sql أولاً: ${friendlyError(e)}');
+    }
+  }
+
+  Future<void> _edit([Map<String, dynamic>? b]) async {
+    final name = TextEditingController(text: (b?['name'] ?? '') as String);
+    final price = TextEditingController(text: b == null ? '0' : '${b['price']}');
+    String? url = b?['image_url'] as String?;
+    var picking = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, setS) => AlertDialog(
+          title: Text(b == null ? 'خلفية جديدة' : 'تعديل الخلفية'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'الاسم')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: price,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'السعر بالجواهر (0 = مجانية)')),
+              const SizedBox(height: 12),
+              if (url != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(url!, height: 120, width: 90, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox(height: 120, child: Icon(Icons.broken_image))),
+                ),
+              OutlinedButton.icon(
+                onPressed: picking
+                    ? null
+                    : () async {
+                        setS(() => picking = true);
+                        try {
+                          final f = await ImagePicker().pickImage(
+                              source: ImageSource.gallery, maxWidth: 1400, imageQuality: 85);
+                          if (f != null) url = await _uploadImage(f, 'backgrounds');
+                        } catch (e) {
+                          if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+                        }
+                        setS(() => picking = false);
+                      },
+                icon: const Icon(Icons.image_rounded),
+                label: Text(picking ? 'جارٍ الرفع…' : 'اختيار صورة الخلفية'),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: picking ? null : () => Navigator.pop(d, true), child: const Text('حفظ')),
+          ],
+        ),
+      ),
+    );
+    final pr = int.tryParse(price.text.trim());
+    if (ok != true) return;
+    if (name.text.trim().isEmpty || pr == null || pr < 0 || url == null) {
+      if (mounted) toast(context, 'أكمل الاسم والسعر والصورة');
+      return;
+    }
+    try {
+      final vals = {'name': name.text.trim(), 'price': pr, 'image_url': url};
+      if (b == null) {
+        await supa.from('room_backgrounds').insert({...vals, 'sort': _items.length + 1});
+      } else {
+        await supa.from('room_backgrounds').update(vals).eq('id', b['id']);
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _upd(Map<String, dynamic> b, Map<String, dynamic> v) async {
+    try {
+      await supa.from('room_backgrounds').update(v).eq('id', b['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _del(Map<String, dynamic> b) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('حذف «${b['name']}»؟'),
+        content: const Text('تُحذف من المتجر ومن ملكية من اشتراها. لإخفائها فقط استعمل المفتاح.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    try {
+      await supa.from('room_backgrounds').delete().eq('id', b['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _edit(),
+        backgroundColor: C.violet,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('خلفية'),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: C.pink))
+          : _items.isEmpty
+              ? const Center(child: Text('لا توجد خلفيات بعد'))
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  itemCount: _items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final b = _items[i];
+                    final pr = (b['price'] as num).toInt();
+                    return GlassCard(
+                      child: Row(children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(b['image_url'] as String,
+                              width: 54, height: 72, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const SizedBox(width: 54, height: 72, child: Icon(Icons.broken_image))),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(b['name'] as String,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                            Text(pr == 0 ? 'مجانية' : '$pr جوهرة',
+                                style: const TextStyle(color: Color(0xFF67E8F9), fontSize: 13)),
+                          ]),
+                        ),
+                        Switch(value: b['active'] == true, onChanged: (v) => _upd(b, {'active': v})),
+                        PopupMenuButton<String>(
+                          onSelected: (v) {
+                            if (v == 'edit') _edit(b);
+                            if (v == 'del') _del(b);
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                            PopupMenuItem(value: 'del', child: Text('حذف')),
+                          ],
+                        ),
+                      ]),
+                    );
+                  },
+                ),
+    );
   }
 }

@@ -219,6 +219,8 @@ String friendlyError(Object e) {
   if (s.contains('seat taken')) return 'المقعد محجوز';
   if (s.contains('host only')) return 'هذا المقعد للمضيف فقط';
   if (s.contains('room locked')) return 'الروم مقفلة 🔒';
+  if (s.contains('background locked')) return 'هذه الخلفية مدفوعة، اشترها أولاً';
+  if (s.contains('not enough gems') && !s.contains('الجواهر')) return 'جواهرك لا تكفي';
   if (s.contains('bad password')) return 'كلمة السر من 4 إلى 16 حرفاً';
   if (s.contains('update the app')) return 'حدّث التطبيق';
   if (s.contains('kicked')) return 'تم طردك من هذه الغرفة';
