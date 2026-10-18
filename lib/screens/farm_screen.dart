@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../shop_screen.dart' show fetchWallet;
 import '../theme.dart';
+import '../widgets/gem_icon.dart';
 
 /// لعبة المزرعة: عجلة أكل، الرهان بالجواهر. كل شيء (النتيجة والدفع والحدود) يحدث في الخادم.
 class FarmScreen extends StatefulWidget {
