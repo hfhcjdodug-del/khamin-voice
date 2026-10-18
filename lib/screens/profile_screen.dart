@@ -1058,7 +1058,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         boxShadow: [BoxShadow(color: Color(0x1A000000), blurRadius: 16, offset: Offset(0, -2))],
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        _bbItem(Icons.ios_share_rounded, const [Color(0xFFFF8A5B), Color(0xFFFF4F9A)], 'مشاركة', () => _share(p)),
+        _bbItem(Icons.ios_share_rounded, const [Color(0xFFFF8A5B), Color(0xFFA855F7)], 'مشاركة', () => _share(p)),
         _bbItem(Icons.home_rounded, const [Color(0xFF8B5CF6), Color(0xFFB07CFF)], 'غرفة', () {
           if (_live != null) {
             openRoom(context, _live!);

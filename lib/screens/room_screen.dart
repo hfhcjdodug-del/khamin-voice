@@ -333,7 +333,7 @@ class _RoomScreenState extends State<RoomScreen> {
     final colors = tier == 3
         ? const [Color(0xFFFDE047), Color(0xFFF97316), Color(0xFFDC2626)]
         : tier == 2
-            ? const [Color(0xFFA855F7), Color(0xFFEC4899)]
+            ? const [Color(0xFFA855F7), Color(0xFFA855F7)]
             : const [Color(0xFF0EA5E9), Color(0xFF6366F1)];
     return Positioned(
       top: 0,

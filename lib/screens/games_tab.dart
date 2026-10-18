@@ -31,7 +31,7 @@ const _games = [
     'خمّن الشخصية',
     'اعرف شخصيتك بأسئلة نعم/لا',
     Icons.face_retouching_natural_rounded,
-    [Color(0xFF7C3AED), Color(0xFFEC4899)],
+    [Color(0xFF7C3AED), Color(0xFFA855F7)],
     ['لاعبان', 'صوت'],
     ready: true,
   ),
@@ -181,7 +181,7 @@ class _GamesTabState extends State<GamesTab> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEC4899)]),
+                  gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFA855F7)]),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Row(children: const [

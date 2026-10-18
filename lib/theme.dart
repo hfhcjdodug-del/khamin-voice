@@ -4,7 +4,7 @@ class C {
   static const bg1 = Color(0xFF150B30);
   static const bg2 = Color(0xFF0A1030);
   static const violet = Color(0xFF8B5CF6);
-  static const pink = Color(0xFFEC4899);
+  static const pink = Color(0xFFA855F7);
   static const cyan = Color(0xFF22D3EE);
   static const green = Color(0xFF34D399);
   static const orange = Color(0xFFFB923C);

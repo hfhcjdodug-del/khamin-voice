@@ -309,7 +309,7 @@ class _WheelPainter extends CustomPainter {
     0: [Color(0xFF334155), Color(0xFF1E293B)],
     5: [Color(0xFF7C3AED), Color(0xFF5B21B6)],
     10: [Color(0xFF06B6D4), Color(0xFF0E7490)],
-    20: [Color(0xFFEC4899), Color(0xFFBE185D)],
+    20: [Color(0xFFA855F7), Color(0xFFBE185D)],
     100: [Color(0xFFFBBF24), Color(0xFFD97706)],
   };
 
@@ -333,7 +333,7 @@ class _WheelPainter extends CustomPainter {
     final R = size.width / 2;
     // الإطار الذهبي
     canvas.drawCircle(c, R, Paint()..shader = const SweepGradient(colors: [Color(0xFFFDE68A), Color(0xFFF59E0B), Color(0xFFFDE68A), Color(0xFFB45309), Color(0xFFFDE68A)]).createShader(Rect.fromCircle(center: c, radius: R)));
-    canvas.drawCircle(c, R, Paint()..color = const Color(0xFFEC4899).withValues(alpha: 0.0));
+    canvas.drawCircle(c, R, Paint()..color = const Color(0xFFA855F7).withValues(alpha: 0.0));
     final r = R - 14;
     if (segs.isEmpty) return;
     final n = segs.length;
