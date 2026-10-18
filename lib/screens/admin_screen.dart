@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -2202,10 +2203,112 @@ class _FarmAdminTabState extends State<_FarmAdminTab> {
     'farm_round_secs': ('مدة الجولة بالثواني (10 إلى 120)', '25'),
   };
 
+  Map<String, dynamic>? _ov;
+  String? _ovErr;
+  Timer? _t;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadOv();
+    _t = Timer.periodic(const Duration(seconds: 3), (_) => _loadOv());
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadOv() async {
+    try {
+      final r = await supa.rpc('admin_farm_overview');
+      if (mounted) {
+        setState(() {
+          _ov = Map<String, dynamic>.from(r as Map);
+          _ovErr = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _ovErr = 'نفّذ voice_v18.sql أولاً');
+    }
+  }
+
+  Future<void> _editMult(Map<String, dynamic> it) async {
+    final t = await _askText(context, 'مضاعف ${it['emoji']} ${it['name']}', '${it['mult']}', max: 4);
+    if (t == null) return;
+    final n = int.tryParse(t);
+    if (n == null || n < 2 || n > 500) {
+      if (mounted) toast(context, 'اكتب رقماً من 2 إلى 500');
+      return;
+    }
+    try {
+      await supa.from('farm_items').update({'mult': n}).eq('idx', it['item']);
+      await _loadOv();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
+
+  Widget _monitor() {
+    final ov = _ov;
+    if (ov == null) {
+      return GlassCard(child: Padding(padding: const EdgeInsets.all(14), child: Text(_ovErr ?? 'جارٍ التحميل…')));
+    }
+    final live = List<Map<String, dynamic>>.from(ov['live'] as List);
+    final rounds = List<Map<String, dynamic>>.from(ov['rounds'] as List);
+    final todayS = _i(ov['today_staked']), todayP = _i(ov['today_paid']);
+    final profit = todayS - todayP;
+    String em(dynamic r) {
+      for (final x in live) {
+        if (_i(x['item']) == _i(r)) return x['emoji'] as String;
+      }
+      return '?';
+    }
+
+    return GlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('مراقبة مباشرة · جولة ${ov['round_id'] ?? '-'}  (${ov['ends_in'] ?? '-'} ث)',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+          const SizedBox(height: 8),
+          for (final it in live)
+            InkWell(
+              onTap: () => _editMult(it),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(children: [
+                  Text('${it['emoji']} ${it['name']}', style: const TextStyle(fontSize: 14)),
+                  const Spacer(),
+                  Text('${_i(it['players'])} لاعب · 💎 ${_i(it['staked'])}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  const SizedBox(width: 10),
+                  Text('×${it['mult']}',
+                      style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF67E8F9))),
+                  const Icon(Icons.edit_rounded, size: 14, color: Colors.white38),
+                ]),
+              ),
+            ),
+          const Divider(color: Colors.white12),
+          Text('اليوم: رهانات $todayS · مدفوع $todayP · ${profit >= 0 ? 'ربح' : 'خسارة'} ${profit.abs()} 💎',
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: profit >= 0 ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5))),
+          const SizedBox(height: 6),
+          const Text('آخر الجولات', style: TextStyle(color: Colors.white60, fontSize: 12)),
+          for (final r in rounds.take(10))
+            Text('#${r['id']}  ${em(r['result'])}  رهان ${_i(r['staked'])} / مدفوع ${_i(r['paid'])}',
+                style: const TextStyle(fontSize: 12, color: Colors.white70)),
+          const SizedBox(height: 6),
+          const Text('اضغط على أي عنصر لتعديل مضاعفه. العنصر ذو المضاعف الأعلى يظهر أقل.',
+              style: TextStyle(fontSize: 11, color: Colors.white54)),
+        ]),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -2243,6 +2346,8 @@ class _FarmAdminTabState extends State<_FarmAdminTab> {
     if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
     final on = _vals['farm_enabled'] == '1';
     return ListView(padding: const EdgeInsets.all(16), children: [
+      _monitor(),
+      const SizedBox(height: 10),
       GlassCard(
         child: SwitchListTile(
           title: const Text('تشغيل لعبة المزرعة', style: TextStyle(fontWeight: FontWeight.w800)),

@@ -25,12 +25,16 @@ class _FarmScreenState extends State<FarmScreen> {
   double _fetchedLeft = 0;
   Timer? _tick;
   Timer? _poll;
-  bool _busy = false;
   bool _fetching = false;
   int? _lastSeenRound;
   int? _flash; // العنصر الفائز المعروض
   String? _banner;
   int _spin = 0;
+  final Map<int, int> _extra = {}; // رهانات لم يؤكدها الخادم بعد
+  int _inflight = 0;
+  bool _errShown = false;
+  Future<void> _q = Future.value();
+  int? _pulse;
   Timer? _bannerTimer;
 
   @override
@@ -61,7 +65,7 @@ class _FarmScreenState extends State<FarmScreen> {
   int _n(dynamic v) => (v as num?)?.toInt() ?? 0;
 
   Future<void> _fetch() async {
-    if (_fetching) return;
+    if (_fetching || _inflight > 0) return;
     _fetching = true;
     try {
       final r = await supa.rpc('farm_state');
@@ -71,6 +75,7 @@ class _FarmScreenState extends State<FarmScreen> {
       final lastRound = s['last_round'] as int?;
       setState(() {
         _s = s;
+        _extra.clear();
         _error = null;
         _gems = w.gems;
         _fetchedAt = DateTime.now();
@@ -101,16 +106,39 @@ class _FarmScreenState extends State<FarmScreen> {
     _fetching = false;
   }
 
-  Future<void> _bet(int item) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await supa.rpc('farm_bet', params: {'p_item': item, 'p_amount': _stake});
-      await _fetch();
-    } catch (e) {
-      if (mounted) toast(context, _farmError(e));
+  /// كل نقرة على الطعام = رهان بقيمة المبلغ المختار. تُعرض فوراً وتُرسل للخادم بالتسلسل.
+  void _tap(int item) {
+    final s = _s;
+    if (s == null || _left <= 2) return;
+    if (_gems < _stake) {
+      toast(context, 'جواهرك لا تكفي');
+      return;
     }
-    if (mounted) setState(() => _busy = false);
+    setState(() {
+      _extra[item] = (_extra[item] ?? 0) + _stake;
+      _gems -= _stake;
+      _pulse = item;
+    });
+    Timer(const Duration(milliseconds: 140), () {
+      if (mounted && _pulse == item) setState(() => _pulse = null);
+    });
+    final amount = _stake;
+    _inflight++;
+    _q = _q.then((_) async {
+      try {
+        await supa.rpc('farm_bet', params: {'p_item': item, 'p_amount': amount});
+      } catch (e) {
+        if (mounted && !_errShown) {
+          _errShown = true;
+          toast(context, _farmError(e));
+        }
+      }
+      _inflight--;
+      if (_inflight == 0) {
+        _errShown = false;
+        await _fetch();
+      }
+    });
   }
 
   String _farmError(Object e) {
@@ -136,9 +164,9 @@ class _FarmScreenState extends State<FarmScreen> {
   Widget build(BuildContext context) {
     final s = _s;
     return Scaffold(
-      backgroundColor: const Color(0xFF14391F),
+      backgroundColor: const Color(0xFF1B0F4A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF14391F),
+        backgroundColor: const Color(0xFF1B0F4A),
         title: const Text('المزرعة', style: TextStyle(fontWeight: FontWeight.w900)),
         actions: [
           Container(
@@ -167,70 +195,155 @@ class _FarmScreenState extends State<FarmScreen> {
     );
   }
 
+  Future<void> _help() => showDialog<void>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('طريقة اللعب'),
+          content: const Text(
+              '١) اختر مبلغ الرهان من الأسفل.\n'
+              '٢) اضغط على الطعام نفسه: كل ضغطة ترمي المبلغ المختار عليه، وضغطتان تضاعفانه.\n'
+              '٣) بعد انتهاء العدّاد يُسحب عنصر واحد عشوائياً، ومن راهن عليه يربح المبلغ × المضاعف المكتوب.\n'
+              'العنصر ذو المضاعف الأعلى أندر ظهوراً.\n'
+              'الجواهر تُخصم عند الرهان، والفوز يُضاف بعد السحب.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('حسناً'))],
+        ),
+      );
+
   Widget _game(Map<String, dynamic> s) {
     final items = List<Map<String, dynamic>>.from(s['items'] as List);
     final mine = Map<String, dynamic>.from(s['my_bets'] as Map);
     final history = List<int>.from((s['history'] as List).map((e) => (e as num).toInt()));
     final closed = _left <= 2;
     final daily = _n(s['daily_limit']), staked = _n(s['today_staked']);
-    return ListView(padding: const EdgeInsets.fromLTRB(14, 6, 14, 30), children: [
-      // العجلة: 8 عناصر حول دائرة فيها العدّاد
-      SizedBox(
-        height: 300,
-        child: LayoutBuilder(builder: (ctx, c) {
-          final w = c.maxWidth;
-          final R = w * 0.36;
-          final center = Offset(w / 2, 150);
-          return Stack(children: [
+    int myBet(int idx) => _n(mine['$idx']) + (_extra[idx] ?? 0);
+    return ListView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 24), children: [
+      Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+          child: Text('جولة ${s['round_id'] ?? '-'}',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+        ),
+        const Spacer(),
+        GestureDetector(
+          onTap: _help,
+          child: Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: Color(0xFFFDE047), shape: BoxShape.circle),
+            child: const Text('؟', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900)),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 8),
+      // العجلة: 8 فقاعات حول دائرة العدّاد، والنقر على الفقاعة نفسها يرمي المبلغ
+      LayoutBuilder(builder: (ctx, c) {
+        final w = c.maxWidth;
+        final d = w * 0.27;
+        final R = (w - d) / 2 - 2;
+        final h = 2 * R + d + 4;
+        final cx = w / 2, cy = h / 2;
+        return SizedBox(
+          height: h,
+          child: Stack(children: [
             Positioned(
-              left: center.dx - R * 0.62,
-              top: center.dy - R * 0.62,
+              left: cx - R * 1.02,
+              top: cy - R * 1.02,
               child: Container(
-                width: R * 1.24,
-                height: R * 1.24,
+                width: R * 2.04,
+                height: R * 2.04,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const RadialGradient(colors: [Color(0xFF1F5C30), Color(0xFF0D2A16)]),
-                  border: Border.all(color: const Color(0xFFFDE047), width: 3),
+                  border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.55), width: 10),
                 ),
+              ),
+            ),
+            Positioned(
+              left: cx - R * 0.5,
+              top: cy - R * 0.5,
+              child: Container(
+                width: R,
+                height: R,
                 alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(colors: [Color(0xFFFDE047), Color(0xFFF59E0B)]),
+                  border: Border.all(color: const Color(0xFFA855F7), width: 5),
+                ),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(closed ? 'جارٍ السحب' : 'الوقت المتبقي',
+                      style: TextStyle(
+                          fontSize: R * 0.11, fontWeight: FontWeight.w800, color: const Color(0xFF3B1D00))),
                   Text(closed ? '⏳' : '${_left.ceil()}',
-                      style: const TextStyle(fontSize: 38, fontWeight: FontWeight.w900, color: Colors.white)),
-                  Text(closed ? 'جارٍ السحب' : 'ثانية للرهان',
-                      style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                      style: TextStyle(
+                          fontSize: R * 0.34, fontWeight: FontWeight.w900, color: const Color(0xFF3B1D00))),
                 ]),
               ),
             ),
             for (var i = 0; i < items.length; i++)
               () {
-                final a = -3.14159 / 2 + i * 2 * 3.14159 / items.length;
-                final x = center.dx + R * math.cos(a) - 30;
-                final y = center.dy + R * math.sin(a) - 30;
+                final a = -math.pi / 2 + i * 2 * math.pi / items.length;
                 final it = items[i];
                 final idx = _n(it['idx']);
                 final lit = _flash != null ? _flash == idx : (closed && _spin == i);
+                final bet = myBet(idx);
                 return Positioned(
-                  left: x,
-                  top: y,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 60,
-                    height: 60,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: lit ? const Color(0xFFFDE047) : Colors.black26,
-                      border: Border.all(color: lit ? Colors.white : Colors.white24, width: lit ? 3 : 1),
-                      boxShadow: lit ? [const BoxShadow(color: Color(0xFFFDE047), blurRadius: 18)] : null,
+                  left: cx + R * math.cos(a) - d / 2,
+                  top: cy + R * math.sin(a) - d / 2,
+                  child: GestureDetector(
+                    onTap: () => _tap(idx),
+                    child: AnimatedScale(
+                      scale: _pulse == idx ? 1.1 : 1,
+                      duration: const Duration(milliseconds: 120),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: d,
+                        height: d,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: lit
+                                  ? const [Color(0xFFFDE047), Color(0xFFF59E0B)]
+                                  : const [Color(0x33FFFFFF), Color(0xFFEC77C8)]),
+                          border: Border.all(
+                              color: lit ? Colors.white : Colors.white54, width: lit ? 3 : 1.5),
+                          boxShadow: lit ? [const BoxShadow(color: Color(0xFFFDE047), blurRadius: 18)] : null,
+                        ),
+                        child: Stack(alignment: Alignment.center, children: [
+                          Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Text(it['emoji'] as String, style: TextStyle(fontSize: d * 0.42)),
+                            Text('×${it['mult']}',
+                                style: TextStyle(
+                                    fontSize: d * 0.17,
+                                    fontWeight: FontWeight.w900,
+                                    color: lit ? Colors.black : Colors.white)),
+                          ]),
+                          if (bet > 0)
+                            Positioned(
+                              bottom: -2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                    color: const Color(0xFF4C1D95),
+                                    border: Border.all(color: const Color(0xFFFDE047)),
+                                    borderRadius: BorderRadius.circular(10)),
+                                child: Text('💎 $bet',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                              ),
+                            ),
+                        ]),
+                      ),
                     ),
-                    child: Text(it['emoji'] as String, style: const TextStyle(fontSize: 30)),
                   ),
                 );
               }(),
-          ]);
-        }),
-      ),
+          ]),
+        );
+      }),
       if (_banner != null)
         Container(
           padding: const EdgeInsets.all(10),
@@ -239,81 +352,92 @@ class _FarmScreenState extends State<FarmScreen> {
           alignment: Alignment.center,
           child: Text(_banner!, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
         ),
-      // السجل
-      SizedBox(
-        height: 36,
-        child: ListView(scrollDirection: Axis.horizontal, children: [
-          const Center(child: Text('آخر النتائج  ', style: TextStyle(color: Colors.white60, fontSize: 12))),
-          for (final h in history)
-            Container(
-              width: 34,
-              margin: const EdgeInsetsDirectional.only(end: 6),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
-              child: Text(items.firstWhere((e) => _n(e['idx']) == h, orElse: () => {'emoji': '?'})['emoji'] as String,
-                  style: const TextStyle(fontSize: 18)),
-            ),
+      // اختيار المبلغ
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+            color: Colors.black26, borderRadius: BorderRadius.circular(18)),
+        child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (final v in _stakes)
+              GestureDetector(
+                onTap: () => setState(() => _stake = v),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: _stake == v ? const Color(0xFFFDE047) : const Color(0xFF3B2A7A),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: _stake == v ? Colors.white : Colors.white24, width: _stake == v ? 2 : 1),
+                  ),
+                  child: Text('💎 $v',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: _stake == v ? Colors.black : Colors.white)),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 8),
+          const Text('اختر المبلغ ثم اضغط على الطعام',
+              style: TextStyle(fontSize: 12, color: Colors.white70)),
+        ]),
+      ),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14)),
+            child: Column(children: [
+              const Text('رصيدي', style: TextStyle(fontSize: 12, color: Colors.white70)),
+              Text('💎 $_gems', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+            ]),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14)),
+            child: Column(children: [
+              const Text('رهانات اليوم', style: TextStyle(fontSize: 12, color: Colors.white70)),
+              Text('$staked / $daily',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            ]),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 10),
+      // سجل النتائج
+      Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14)),
+        child: Row(children: [
+          const Text('النتيجة', style: TextStyle(color: Colors.white70, fontSize: 12)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ListView(scrollDirection: Axis.horizontal, children: [
+              for (final h in history)
+                Container(
+                  width: 38,
+                  margin: const EdgeInsetsDirectional.only(end: 6),
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(color: Color(0x22FFFFFF), shape: BoxShape.circle),
+                  child: Text(
+                      items.firstWhere((e) => _n(e['idx']) == h, orElse: () => {'emoji': '?'})['emoji']
+                          as String,
+                      style: const TextStyle(fontSize: 20)),
+                ),
+            ]),
+          ),
         ]),
       ),
       const SizedBox(height: 12),
-      // قيمة الرهان
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        for (final v in _stakes)
-          GestureDetector(
-            onTap: () => setState(() => _stake = v),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: _stake == v ? const Color(0xFFFDE047) : Colors.black26,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text('$v',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w900, color: _stake == v ? Colors.black : Colors.white)),
-            ),
-          ),
-      ]),
-      const SizedBox(height: 12),
-      // بطاقات الأكل
-      GridView.count(
-        crossAxisCount: 4,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 0.78,
-        children: [
-          for (final it in items)
-            GestureDetector(
-              onTap: closed || _busy ? null : () => _bet(_n(it['idx'])),
-              child: Opacity(
-                opacity: closed ? 0.5 : 1,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: mine.containsKey('${it['idx']}') ? const Color(0xFFFDE047) : Colors.white12,
-                        width: mine.containsKey('${it['idx']}') ? 2 : 1),
-                  ),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text(it['emoji'] as String, style: const TextStyle(fontSize: 32)),
-                    Text('×${it['mult']}',
-                        style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFFDE047))),
-                    const SizedBox(height: 2),
-                    Text(mine.containsKey('${it['idx']}') ? '💎 ${mine['${it['idx']}']}' : ' ',
-                        style: const TextStyle(fontSize: 12)),
-                  ]),
-                ),
-              ),
-            ),
-        ],
-      ),
-      const SizedBox(height: 14),
       Text(
-        'الرهان بين ${s['min_bet']} و${s['max_bet']} 💎 للجولة. الحد اليومي $daily 💎 (استعملت $staked).\n'
-        'الجواهر المُراهَن بها تُخصم فوراً، والفوز يُضاف بعد السحب. العب بمسؤولية.',
+        'الرهان بين ${s['min_bet']} و${s['max_bet']} 💎 للجولة. الجواهر تُخصم فوراً، والفوز يُضاف بعد السحب. العب بمسؤولية.',
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 11, color: Colors.white54, height: 1.6),
       ),
