@@ -430,14 +430,10 @@ class _RoomsTabState extends State<RoomsTab> {
               ),
             ]),
           ));
-        } else {
-          for (var i = 0; i < all.length; i++) {
-            rows.add(SizedBox(height: bigSize / 1.6, child: _card(all, i, big: true)));
-            rows.add(const SizedBox(height: g));
-          }
         }
-        if (all.length > 3) {
-          rows.add(const SizedBox(height: g));
+        final from = all.length >= 3 ? 3 : 0;
+        if (all.length > from) {
+          if (from == 3) rows.add(const SizedBox(height: g));
           rows.add(GridView.count(
             crossAxisCount: 3,
             shrinkWrap: true,
@@ -445,7 +441,7 @@ class _RoomsTabState extends State<RoomsTab> {
             mainAxisSpacing: g,
             crossAxisSpacing: g,
             childAspectRatio: 1,
-            children: [for (var i = 3; i < all.length; i++) _card(all, i)],
+            children: [for (var i = from; i < all.length; i++) _card(all, i)],
           ));
         }
       } else {
@@ -565,9 +561,9 @@ class _CoverCard extends StatelessWidget {
                 ),
               ),
             ),
-            PositionedDirectional(
+            Positioned(
               top: big ? 12 : 8,
-              start: big ? 14 : 9,
+              left: big ? 14 : 9,
               child: Text('$listeners',
                   style: TextStyle(
                       fontSize: big ? 20 : 14,
@@ -600,9 +596,9 @@ class _CoverCard extends StatelessWidget {
             child: Image.network(frame!, fit: BoxFit.fill, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
           ),
         if (rank != null && rank! <= 3)
-          PositionedDirectional(
+          Positioned(
             top: big ? 4 : 2,
-            end: big ? 8 : 5,
+            right: big ? 8 : 5,
             child: Container(
               width: big ? 34 : 24,
               height: big ? 34 : 24,
