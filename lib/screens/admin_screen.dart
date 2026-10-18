@@ -68,7 +68,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 12,
+      length: 13,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -88,6 +88,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'المهام'),
               Tab(text: 'الخلفيات'),
               Tab(text: 'المزرعة'),
+              Tab(text: 'إطارات الغرف'),
             ],
           ),
         ),
@@ -104,6 +105,7 @@ class AdminScreen extends StatelessWidget {
           _MissionsAdminTab(),
           _BackgroundsAdminTab(),
           _FarmAdminTab(),
+          _RoomFramesAdminTab(),
         ]),
       ),
     );
@@ -1759,7 +1761,6 @@ class _GiftsAdminTabState extends State<_GiftsAdminTab> {
   Future<void> _image(Map<String, dynamic> g) async {
     try {
       final url = await _pickGiftFile();
-      if (url == null) return;
       await supa.from('gifts').update({'image_url': url}).eq('id', g['id']);
       await _load();
       if (mounted) toast(context, 'تم تغيير ملف الهدية');
@@ -2272,6 +2273,129 @@ class _FarmAdminTabState extends State<_FarmAdminTab> {
           style: TextStyle(fontSize: 12, color: Colors.white60, height: 1.6),
         ),
       ),
+    ]);
+  }
+}
+
+
+/// إطارات غلاف الغرف الترند: صورة PNG شفافة تُوضع فوق بطاقة الغرفة.
+class _RoomFramesAdminTab extends StatefulWidget {
+  const _RoomFramesAdminTab();
+
+  @override
+  State<_RoomFramesAdminTab> createState() => _RoomFramesAdminTabState();
+}
+
+class _RoomFramesAdminTabState extends State<_RoomFramesAdminTab> {
+  final Map<String, String> _v = {};
+  bool _loading = true;
+  bool _busy = false;
+
+  static const _slots = [
+    ('room_frame_big', 'إطار الغرفة الكبيرة (المركز الأول)', 'مربّع، مثلاً 800×800 بكسل'),
+    ('room_frame_small', 'إطار الغرف الصغيرة (باقي الترند)', 'مربّع، مثلاً 400×400 بكسل'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('app_settings').select().inFilter('key', [for (final x in _slots) x.$1]);
+      _v.clear();
+      for (final m in r as List) {
+        _v[m['key'] as String] = (m['value'] ?? '') as String;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _upload(String key) async {
+    setState(() => _busy = true);
+    try {
+      final r = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'webp', 'gif'],
+        withData: true,
+      );
+      if (r == null || r.files.isEmpty) return;
+      final f = r.files.first;
+      final bytes = f.bytes;
+      if (bytes == null) throw 'تعذّر قراءة الملف';
+      if (bytes.length > 3 * 1024 * 1024) throw 'الملف أكبر من 3 ميغا';
+      final ext = extOf(f.name, ['png', 'webp', 'gif'], 'png');
+      final url = await uploadMedia(
+          bucket: 'game-media', folder: 'frames', bytes: bytes, ext: ext, contentType: 'image/$ext');
+      await _setSetting(key, url);
+      _v[key] = url;
+      if (mounted) toast(context, 'تم حفظ الإطار');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove(String key) async {
+    try {
+      await _setSetting(key, '');
+      _v[key] = '';
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Text(
+          'ارفع صورة PNG شفافة (الوسط فارغ) فتظهر فوق غلاف الغرفة الترند. الغرف العادية بلا إطار.',
+          style: TextStyle(color: Colors.white70)),
+      const SizedBox(height: 14),
+      for (final s in _slots)
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: C.glass, borderRadius: BorderRadius.circular(18)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(s.$2, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            Text(s.$3, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                    color: Colors.white12, borderRadius: BorderRadius.circular(12)),
+                child: (_v[s.$1] ?? '').isEmpty
+                    ? const Center(child: Text('لا يوجد إطار', style: TextStyle(color: Colors.white54)))
+                    : Image.network(_v[s.$1]!,
+                        fit: BoxFit.fill,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : () => _upload(s.$1),
+                  icon: const Icon(Icons.upload_rounded),
+                  label: const Text('رفع'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: (_v[s.$1] ?? '').isEmpty ? null : () => _remove(s.$1),
+                child: const Text('حذف'),
+              ),
+            ]),
+          ]),
+        ),
     ]);
   }
 }

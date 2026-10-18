@@ -6,7 +6,6 @@ import '../main.dart';
 import '../room_look.dart';
 import '../songs.dart';
 import '../theme.dart';
-import '../widgets/trend_frame.dart';
 import 'room_screen.dart';
 
 /// يسأل عن كلمة سر الروم المقفلة. يرجع true إذا سُمح بالدخول.
@@ -98,6 +97,38 @@ Future<void> openRoom(BuildContext context, Map<String, dynamic> r) async {
 
 /// نافذة إنشاء غرفة جديدة ثم الدخول إليها (تُستعمل من زر المايك الأوسط أيضاً).
 Future<void> createRoomFlow(BuildContext context) async {
+  // غرفتي المحفوظة: آخر غرفة أنشأتها (الاسم والموضوع والخلفية) تُفتح مباشرة بلا سؤال.
+  Map<String, dynamic>? saved;
+  try {
+    final r = await supa
+        .from('rooms')
+        .select()
+        .eq('host_id', myId)
+        .order('created_at', ascending: false)
+        .limit(1);
+    final l = List<Map<String, dynamic>>.from(r);
+    if (l.isNotEmpty && ((l.first['title'] ?? '') as String).trim().length >= 2) saved = l.first;
+  } catch (_) {}
+  if (!context.mounted) return;
+  if (saved != null) {
+    try {
+      final ins = <String, dynamic>{
+        'title': saved['title'],
+        'topic': saved['topic'] ?? '',
+        'host_id': myId,
+      };
+      for (final k in ['bg_preset', 'bg_url', 'mic_skin', 'mic_skin_url', 'mic_count']) {
+        if (saved[k] != null) ins[k] = saved[k];
+      }
+      final row = await supa.from('rooms').insert(ins).select().single();
+      if (!context.mounted) return;
+      await openRoom(context, Map<String, dynamic>.from(row));
+      return;
+    } catch (_) {
+      // فشل النسخ (عمود ناقص مثلاً): نرجع للنافذة العادية
+    }
+  }
+  if (!context.mounted) return;
   final title = TextEditingController();
   final topic = TextEditingController();
   final ok = await showModalBottomSheet<bool>(
@@ -169,6 +200,7 @@ class _RoomsTabState extends State<RoomsTab> {
   String? _error;
   Timer? _timer;
   bool _friendsOnly = false;
+  _Frames _frames = const _Frames();
 
   @override
   void initState() {
@@ -187,7 +219,10 @@ class _RoomsTabState extends State<RoomsTab> {
   @override
   void didUpdateWidget(covariant RoomsTab old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _load(silent: true);
+    if (widget.active && !old.active) {
+      _load(silent: true);
+      _loadFrames();
+    }
   }
 
   @override
@@ -196,7 +231,22 @@ class _RoomsTabState extends State<RoomsTab> {
     super.dispose();
   }
 
+  Future<void> _loadFrames() async {
+    try {
+      final r = await supa.from('app_settings').select().inFilter('key', ['room_frame_big', 'room_frame_small']);
+      String? v(String k) {
+        for (final m in r as List) {
+          if (m['key'] == k && (m['value'] as String).isNotEmpty) return m['value'] as String;
+        }
+        return null;
+      }
+
+      if (mounted) setState(() => _frames = _Frames(big: v('room_frame_big'), small: v('room_frame_small')));
+    } catch (_) {}
+  }
+
   Future<void> _load({bool silent = false}) async {
+    if (!silent) _loadFrames();
     try {
       List<Map<String, dynamic>> rows;
       try {
@@ -245,27 +295,6 @@ class _RoomsTabState extends State<RoomsTab> {
     return l.take(9).toList();
   }
 
-  List<Map<String, dynamic>> _fresh(List<Map<String, dynamic>> trend) {
-    final ids = {for (final r in trend) r['id']};
-    final l = _base.where((r) => !ids.contains(r['id'])).toList()
-      ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
-    return l;
-  }
-
-  Widget _sectionTitle(String t, {String? sub}) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 14, 4, 10),
-        child: Row(children: [
-          Container(
-              width: 4,
-              height: 18,
-              decoration: BoxDecoration(color: _rViolet, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(width: 8),
-          Text(t, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: _rInk)),
-          const Spacer(),
-          if (sub != null) Text(sub, style: const TextStyle(fontSize: 11, color: _rSub)),
-        ]),
-      );
-
   Widget _headerBtn(IconData i, String tip, VoidCallback f) => IconButton(
         tooltip: tip,
         onPressed: f,
@@ -275,7 +304,6 @@ class _RoomsTabState extends State<RoomsTab> {
   @override
   Widget build(BuildContext context) {
     final trend = _trend;
-    final fresh = _fresh(trend);
     return Scaffold(
       backgroundColor: const Color(0xFF6D28D9),
       body: Container(
@@ -345,7 +373,7 @@ class _RoomsTabState extends State<RoomsTab> {
                                           textAlign: TextAlign.center,
                                           style: const TextStyle(color: _rSub))),
                                 ])
-                              : _body(trend, fresh),
+                              : _body(),
                     ),
                   ),
                 ),
@@ -357,77 +385,109 @@ class _RoomsTabState extends State<RoomsTab> {
     );
   }
 
-  Widget _body(List<Map<String, dynamic>> trend, List<Map<String, dynamic>> fresh) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
-      children: [
-        if (trend.isNotEmpty) ...[
-          _sectionTitle('🔥 ترند الأسبوع', sub: 'حسب الهدايا المُهداة'),
-          _TrendTop(room: trend[0], onTap: () => _open(trend[0])),
-          if (trend.length > 1) ...[
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: _TrendMid(room: trend[1], rank: 2, onTap: () => _open(trend[1]))),
-              const SizedBox(width: 10),
-              if (trend.length > 2)
-                Expanded(child: _TrendMid(room: trend[2], rank: 3, onTap: () => _open(trend[2])))
-              else
-                const Spacer(),
-            ]),
-          ],
-          if (trend.length > 3) ...[
-            const SizedBox(height: 10),
-            GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.86,
-              children: [
-                for (var i = 3; i < trend.length; i++)
-                  _TrendSmall(room: trend[i], rank: i + 1, onTap: () => _open(trend[i])),
-              ],
-            ),
-          ],
-        ],
-        if (fresh.isEmpty && trend.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40),
-            child: Column(children: [
-              const Icon(Icons.mic_none_rounded, size: 72, color: Color(0xFFD4D4E0)),
-              const SizedBox(height: 12),
-              Text(
-                  _friendsOnly
-                      ? 'لا يوجد أصدقاء لك داخل الغرف الآن'
-                      : 'لا توجد غرف مباشرة الآن\nكن أول من يبدأ غرفة!',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: _rSub, fontSize: 16)),
-            ]),
-          ),
-        for (final r in fresh) _FreshRow(room: r, onTap: () => _open(r)),
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: () async {
-            await createRoomFlow(context);
-            if (mounted) _load(silent: true);
-          },
-          child: Container(
-            height: 60,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.add_circle_rounded, color: Colors.white),
-              SizedBox(width: 10),
-              Text('ابدأ غرفتك الآن',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
-            ]),
-          ),
-        ),
-      ],
+  /// ترتيب العرض: الترند أولاً (حسب الدعم) ثم باقي الغرف حسب عدد المستمعين.
+  List<Map<String, dynamic>> get _ordered {
+    final t = _trend;
+    final ids = {for (final r in t) r['id']};
+    final rest = _base.where((r) => !ids.contains(r['id'])).toList()
+      ..sort((a, b) => _n(b, 'listeners').compareTo(_n(a, 'listeners')));
+    return [...t, ...rest];
+  }
+
+  Widget _card(List<Map<String, dynamic>> all, int i, {bool big = false}) {
+    final r = all[i];
+    final trending = _n(r, 'week_support') > 0;
+    return _CoverCard(
+      room: r,
+      big: big,
+      rank: trending && i < 3 ? i + 1 : null,
+      frame: trending ? (big ? _frames.big : _frames.small) : null,
+      onTap: () => _open(r),
     );
+  }
+
+  Widget _body() {
+    final all = _ordered;
+    const g = 8.0;
+    return LayoutBuilder(builder: (context, box) {
+      final w = box.maxWidth - 24; // هوامش 12 من الجانبين
+      final cell = (w - 2 * g) / 3;
+      final bigSize = cell * 2 + g;
+      final rows = <Widget>[];
+      if (all.isNotEmpty) {
+        if (all.length >= 3) {
+          rows.add(SizedBox(
+            height: bigSize,
+            child: Row(children: [
+              SizedBox(width: bigSize, child: _card(all, 0, big: true)),
+              const SizedBox(width: g),
+              Expanded(
+                child: Column(children: [
+                  SizedBox(height: cell, child: _card(all, 1)),
+                  const SizedBox(height: g),
+                  SizedBox(height: cell, child: _card(all, 2)),
+                ]),
+              ),
+            ]),
+          ));
+        } else {
+          for (var i = 0; i < all.length; i++) {
+            rows.add(SizedBox(height: bigSize / 1.6, child: _card(all, i, big: true)));
+            rows.add(const SizedBox(height: g));
+          }
+        }
+        if (all.length > 3) {
+          rows.add(const SizedBox(height: g));
+          rows.add(GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: g,
+            crossAxisSpacing: g,
+            childAspectRatio: 1,
+            children: [for (var i = 3; i < all.length; i++) _card(all, i)],
+          ));
+        }
+      } else {
+        rows.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Column(children: [
+            const Icon(Icons.mic_none_rounded, size: 72, color: Color(0xFFD4D4E0)),
+            const SizedBox(height: 12),
+            Text(
+                _friendsOnly
+                    ? 'لا يوجد أصدقاء لك داخل الغرف الآن'
+                    : 'لا توجد غرف مباشرة الآن\nكن أول من يبدأ غرفة!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: _rSub, fontSize: 16)),
+          ]),
+        ));
+      }
+      rows.add(const SizedBox(height: 14));
+      rows.add(GestureDetector(
+        onTap: () async {
+          await createRoomFlow(context);
+          if (mounted) _load(silent: true);
+        },
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.add_circle_rounded, color: Colors.white),
+            SizedBox(width: 10),
+            Text('ابدأ غرفتك الآن',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
+          ]),
+        ),
+      ));
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 120),
+        children: rows,
+      );
+    });
   }
 }
 
@@ -446,305 +506,118 @@ Widget _lockBadge(Map<String, dynamic> r) => r['locked'] == true
         child: Icon(Icons.lock_rounded, size: 14, color: Color(0xFFFDE68A)))
     : const SizedBox.shrink();
 
-Widget _supportChip(Map<String, dynamic> r) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(10)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Text('💎', style: TextStyle(fontSize: 10)),
-        const SizedBox(width: 3),
-        Text(_fmt((r['week_support'] as num?) ?? 0),
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
-      ]),
-    );
 
-class _TrendTop extends StatelessWidget {
+class _Frames {
+  final String? big;
+  final String? small;
+  const _Frames({this.big, this.small});
+}
+
+/// بطاقة غرفة: صورة صاحب الغرفة كغلاف كامل + عدد المستمعين + الاسم + إطار الترند (إن وُجد).
+class _CoverCard extends StatelessWidget {
   final Map<String, dynamic> room;
   final VoidCallback onTap;
-  const _TrendTop({required this.room, required this.onTap});
+  final int? rank; // 1..3 للميدالية
+  final String? frame; // رابط الإطار (للترند فقط)
+  final bool big;
+  const _CoverCard(
+      {required this.room, required this.onTap, this.rank, this.frame, this.big = false});
+
+  Color get _medal => rank == 1
+      ? const Color(0xFFF59E0B)
+      : (rank == 2 ? const Color(0xFF60A5FA) : const Color(0xFFF97316));
 
   @override
   Widget build(BuildContext context) {
     final listeners = (room['listeners'] as num?)?.toInt() ?? 0;
+    final name = (room['host_name'] ?? '?') as String;
+    final avatar = room['host_avatar'] as String?;
+    final title = (room['title'] ?? '') as String;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        height: 156,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [BoxShadow(color: const Color(0xFFF59E0B).withValues(alpha: 0.35), blurRadius: 16)],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
+      child: Stack(fit: StackFit.expand, clipBehavior: Clip.none, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(big ? 16 : 12),
           child: Stack(fit: StackFit.expand, children: [
-            _roomBg(room, dim: 0.3),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(children: [
-                TrendFrame(
-                  size: 70,
-                  rank: 1,
-                  child: ClipOval(
-                    child: SizedBox(
-                      width: 70,
-                      height: 70,
-                      child: Avatar(
-                          name: (room['host_name'] ?? '?') as String,
-                          url: room['host_avatar'] as String?,
-                          size: 70),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                          decoration: BoxDecoration(
-                              gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEF4444)]),
-                              borderRadius: BorderRadius.circular(12)),
-                          child: const Text('🥇 المركز الأول',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white)),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(children: [
-                          _lockBadge(room),
-                          Expanded(
-                            child: Text(room['title'] as String,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
-                          ),
-                        ]),
-                        Text('${room['host_name']}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: Colors.white70)),
-                        const SizedBox(height: 6),
-                        Row(children: [
-                          _supportChip(room),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.headphones_rounded, size: 14, color: Colors.white70),
-                          const SizedBox(width: 3),
-                          Text('$listeners', style: const TextStyle(fontSize: 12, color: Colors.white70)),
-                        ]),
-                      ]),
-                ),
-              ]),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _TrendMid extends StatelessWidget {
-  final Map<String, dynamic> room;
-  final int rank;
-  final VoidCallback onTap;
-  const _TrendMid({required this.room, required this.rank, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 118,
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Stack(fit: StackFit.expand, children: [
-            _roomBg(room, dim: 0.3),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Text(rank == 2 ? '🥈' : '🥉', style: const TextStyle(fontSize: 18)),
-                  const Spacer(),
-                  _supportChip(room),
-                ]),
-                const Spacer(),
-                Row(children: [
-                  TrendFrame(
-                    size: 30,
-                    rank: rank,
-                    child: ClipOval(
-                      child: SizedBox(
-                        width: 30,
-                        height: 30,
-                        child: Avatar(
-                            name: (room['host_name'] ?? '?') as String,
-                            url: room['host_avatar'] as String?,
-                            size: 30),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        _lockBadge(room),
-                        Expanded(
-                          child: Text(room['title'] as String,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white)),
-                        ),
-                      ]),
-                      Text('${room['host_name']}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, color: Colors.white70)),
-                    ]),
-                  ),
-                ]),
-              ]),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _TrendSmall extends StatelessWidget {
-  final Map<String, dynamic> room;
-  final int rank;
-  final VoidCallback onTap;
-  const _TrendSmall({required this.room, required this.rank, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(fit: StackFit.expand, children: [
-          _roomBg(room, dim: 0.35),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(children: [
-              Row(children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                  child: Text('$rank',
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white)),
-                ),
-                const Spacer(),
-                _lockBadge(room),
-              ]),
-              const Spacer(),
-              ClipOval(
-                child: SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: Avatar(
-                      name: (room['host_name'] ?? '?') as String,
-                      url: room['host_avatar'] as String?,
-                      size: 36),
+            _roomBg(room, dim: 0.1),
+            if (avatar != null && avatar.isNotEmpty)
+              Image.network(avatar,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Center(
+                      child: Text(name.isEmpty ? '?' : name.characters.first,
+                          style: const TextStyle(fontSize: 40, color: Colors.white54))))
+            else
+              Center(
+                  child: Text(name.isEmpty ? '?' : name.characters.first,
+                      style: TextStyle(fontSize: big ? 90 : 40, color: Colors.white54))),
+            // تظليل سفلي لقراءة الاسم
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: big ? 90 : 60,
+              child: const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [Color(0xCC000000), Color(0x00000000)]),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(room['title'] as String,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.white)),
-              const SizedBox(height: 2),
-              _supportChip(room),
-            ]),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _FreshRow extends StatelessWidget {
-  final Map<String, dynamic> room;
-  final VoidCallback onTap;
-  const _FreshRow({required this.room, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final listeners = (room['listeners'] as num?)?.toInt() ?? 0;
-    final friends = (room['friends'] as num?)?.toInt() ?? 0;
-    final topic = (room['topic'] ?? '') as String;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7F7FA),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFEDEEF3)),
-        ),
-        child: Row(children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: Stack(fit: StackFit.expand, children: [
-                _roomBg(room, dim: 0.1),
-                Center(
-                  child: ClipOval(
-                    child: SizedBox(
-                      width: 38,
-                      height: 38,
-                      child: Avatar(
-                          name: (room['host_name'] ?? '?') as String,
-                          url: room['host_avatar'] as String?,
-                          size: 38),
-                    ),
-                  ),
+            ),
+            PositionedDirectional(
+              top: big ? 12 : 8,
+              start: big ? 14 : 9,
+              child: Text('$listeners',
+                  style: TextStyle(
+                      fontSize: big ? 20 : 14,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      shadows: const [Shadow(blurRadius: 4, color: Colors.black87)])),
+            ),
+            PositionedDirectional(
+              bottom: big ? 12 : 8,
+              start: big ? 14 : 9,
+              end: big ? 14 : 9,
+              child: Row(children: [
+                _lockBadge(room),
+                Expanded(
+                  child: Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: big ? 18 : 12,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          shadows: const [Shadow(blurRadius: 4, color: Colors.black87)])),
                 ),
               ]),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                if (room['locked'] == true)
-                  const Padding(
-                      padding: EdgeInsetsDirectional.only(end: 4),
-                      child: Icon(Icons.lock_rounded, size: 14, color: Color(0xFFF59E0B))),
-                Expanded(
-                  child: Text(room['title'] as String,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _rInk)),
-                ),
-              ]),
-              const SizedBox(height: 2),
-              Text(topic.isEmpty ? '${room['host_name']}' : '$topic · ${room['host_name']}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: _rSub)),
-            ]),
-          ),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.headphones_rounded, size: 14, color: _rViolet),
-              const SizedBox(width: 3),
-              Text('$listeners',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _rViolet)),
-            ]),
-            if (friends > 0)
-              Text('$friends من أصدقائك',
-                  style: const TextStyle(fontSize: 10, color: _rSub)),
           ]),
-        ]),
-      ),
+        ),
+        if (frame != null && frame!.isNotEmpty)
+          IgnorePointer(
+            child: Image.network(frame!, fit: BoxFit.fill, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+          ),
+        if (rank != null && rank! <= 3)
+          PositionedDirectional(
+            top: big ? 4 : 2,
+            end: big ? 8 : 5,
+            child: Container(
+              width: big ? 34 : 24,
+              height: big ? 34 : 24,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _medal,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: Text('$rank',
+                  style: TextStyle(
+                      fontSize: big ? 16 : 12, fontWeight: FontWeight.w900, color: Colors.white)),
+            ),
+          ),
+      ]),
     );
   }
 }
