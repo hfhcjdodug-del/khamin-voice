@@ -400,7 +400,6 @@ class _RoomsTabState extends State<RoomsTab> {
     return _CoverCard(
       room: r,
       big: big,
-      rank: trending && i < 3 ? i + 1 : null,
       frame: trending ? (big ? _frames.big : _frames.small) : null,
       onTap: () => _open(r),
     );
@@ -513,15 +512,10 @@ class _Frames {
 class _CoverCard extends StatelessWidget {
   final Map<String, dynamic> room;
   final VoidCallback onTap;
-  final int? rank; // 1..3 للميدالية
   final String? frame; // رابط الإطار (للترند فقط)
   final bool big;
   const _CoverCard(
-      {required this.room, required this.onTap, this.rank, this.frame, this.big = false});
-
-  Color get _medal => rank == 1
-      ? const Color(0xFFF59E0B)
-      : (rank == 2 ? const Color(0xFF60A5FA) : const Color(0xFFF97316));
+      {required this.room, required this.onTap, this.frame, this.big = false});
 
   @override
   Widget build(BuildContext context) {
@@ -594,24 +588,6 @@ class _CoverCard extends StatelessWidget {
         if (frame != null && frame!.isNotEmpty)
           IgnorePointer(
             child: Image.network(frame!, fit: BoxFit.fill, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-          ),
-        if (rank != null && rank! <= 3)
-          Positioned(
-            top: big ? 4 : 2,
-            right: big ? 8 : 5,
-            child: Container(
-              width: big ? 34 : 24,
-              height: big ? 34 : 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _medal,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: Text('$rank',
-                  style: TextStyle(
-                      fontSize: big ? 16 : 12, fontWeight: FontWeight.w900, color: Colors.white)),
-            ),
           ),
       ]),
     );
