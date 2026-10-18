@@ -448,10 +448,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
         children: [
-          for (var i = 0; i < titleNames.length; i++)
+          for (var i = 0; i < BadgeStore.titles.length; i++)
             Opacity(
               opacity: i <= top ? 1 : 0.25,
-              child: TitleImage(level: i * 2 + 1, height: 80),
+              child: TitleDefImage(def: BadgeStore.titles[i], height: 80),
             ),
         ],
       ),
@@ -509,7 +509,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
         children: [
-          for (var l = 1; l <= 50; l++)
+          for (var l = 1; l <= BadgeStore.maxLevel; l++)
             Opacity(opacity: l <= lv ? 1 : 0.25, child: LevelBadge(level: l, size: 56)),
         ],
       ),
@@ -753,7 +753,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               scrollDirection: Axis.horizontal,
               itemCount: top + 1,
               separatorBuilder: (_, __) => const SizedBox(width: 6),
-              itemBuilder: (_, i) => TitleImage(level: (top - i) * 2 + 1, height: 38),
+              itemBuilder: (_, i) => TitleDefImage(def: BadgeStore.titles[top - i], height: 38),
             ),
           ),
         ),

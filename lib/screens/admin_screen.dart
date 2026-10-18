@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config.dart';
 import '../gift_image.dart';
+import '../level.dart';
 import '../main.dart';
 import '../media.dart';
 import '../theme.dart';
@@ -69,7 +70,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 13,
+      length: 14,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -90,6 +91,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'الخلفيات'),
               Tab(text: 'المزرعة'),
               Tab(text: 'إطارات الغرف'),
+              Tab(text: 'الألقاب والمستويات'),
             ],
           ),
         ),
@@ -107,6 +109,7 @@ class AdminScreen extends StatelessWidget {
           _BackgroundsAdminTab(),
           _FarmAdminTab(),
           _RoomFramesAdminTab(),
+          _BadgesAdminTab(),
         ]),
       ),
     );
@@ -2501,6 +2504,251 @@ class _RoomFramesAdminTabState extends State<_RoomFramesAdminTab> {
             ]),
           ]),
         ),
+    ]);
+  }
+}
+
+
+/// يختار صورة (PNG/WebP/GIF شفافة) ويرفعها إلى game-media ويعيد رابطها، أو null عند الإلغاء.
+Future<String?> _pickBadgeImage(String folder) async {
+  final r = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['png', 'webp', 'gif', 'jpg', 'jpeg'],
+    withData: true,
+  );
+  if (r == null || r.files.isEmpty) return null;
+  final f = r.files.first;
+  final bytes = f.bytes;
+  if (bytes == null) throw 'تعذّر قراءة الملف';
+  if (bytes.length > 3 * 1024 * 1024) throw 'الملف أكبر من 3 ميغا';
+  final ext = extOf(f.name, ['png', 'webp', 'gif', 'jpg', 'jpeg'], 'png');
+  return uploadMedia(
+      bucket: 'game-media',
+      folder: folder,
+      bytes: bytes,
+      ext: ext,
+      contentType: 'image/${ext == 'jpg' ? 'jpeg' : ext}');
+}
+
+/// الألقاب والمستويات: تعديل الصور والأسماء وإضافة ألقاب ومستويات جديدة.
+class _BadgesAdminTab extends StatefulWidget {
+  const _BadgesAdminTab();
+
+  @override
+  State<_BadgesAdminTab> createState() => _BadgesAdminTabState();
+}
+
+class _BadgesAdminTabState extends State<_BadgesAdminTab> {
+  int _mode = 0; // 0 ألقاب، 1 مستويات
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    BadgeStore.ensure(force: true);
+    BadgeStore.version.addListener(_r);
+  }
+
+  @override
+  void dispose() {
+    BadgeStore.version.removeListener(_r);
+    super.dispose();
+  }
+
+  void _r() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _editTitle(TitleDef? t) async {
+    final isNew = t == null;
+    final all = BadgeStore.titles;
+    final newIdx = all.fold<int>(24, (m, e) => e.idx > m ? e.idx : m) + 1;
+    final idx = t?.idx ?? newIdx;
+    final name = TextEditingController(text: t?.name ?? '');
+    final from = TextEditingController(text: '${t?.fromLevel ?? (all.isEmpty ? 1 : all.last.fromLevel + 2)}');
+    String? url = t?.url;
+    var up = false;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, setS) => AlertDialog(
+          title: Text(isNew ? 'لقب جديد' : 'تعديل اللقب'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم اللقب')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: from,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'يبدأ من المستوى')),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 70,
+                child: url != null
+                    ? Image.network(url!, fit: BoxFit.contain)
+                    : (t != null
+                        ? TitleDefImage(def: t, height: 64)
+                        : const Center(child: Text('لا توجد صورة'))),
+              ),
+              OutlinedButton.icon(
+                onPressed: up
+                    ? null
+                    : () async {
+                        setS(() => up = true);
+                        try {
+                          final u = await _pickBadgeImage('titles');
+                          if (u != null) url = u;
+                        } catch (e) {
+                          if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+                        }
+                        setS(() => up = false);
+                      },
+                icon: const Icon(Icons.upload_rounded),
+                label: const Text('رفع صورة اللقب'),
+              ),
+            ]),
+          ),
+          actions: [
+            if (!isNew)
+              TextButton(
+                  onPressed: () => Navigator.pop(d, 'del'),
+                  child: Text(idx < 25 ? 'استعادة الأصلي' : 'حذف')),
+            TextButton(onPressed: () => Navigator.pop(d), child: const Text('إلغاء')),
+            FilledButton(onPressed: up ? null : () => Navigator.pop(d, 'save'), child: const Text('حفظ')),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    try {
+      if (action == 'del') {
+        await supa.from('title_defs').delete().eq('idx', idx);
+      } else {
+        final n = name.text.trim();
+        final fl = int.tryParse(from.text.trim());
+        if (n.length < 2 || fl == null || fl < 1 || fl > 500) {
+          if (mounted) toast(context, 'اكتب اسماً ومستوى صحيحاً (1 إلى 500)');
+          return;
+        }
+        await supa.from('title_defs').upsert({'idx': idx, 'from_level': fl, 'name': n, 'image_url': url ?? ''});
+      }
+      await BadgeStore.ensure(force: true);
+      if (mounted) toast(context, 'تم الحفظ');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الحفظ: ${friendlyError(e)}');
+    }
+  }
+
+  Future<void> _setLevelImage(int level) async {
+    setState(() => _busy = true);
+    try {
+      final u = await _pickBadgeImage('levels');
+      if (u == null) return;
+      await supa.from('level_badges').upsert({'level': level, 'image_url': u});
+      await BadgeStore.ensure(force: true);
+      if (mounted) toast(context, 'تم حفظ شكل المستوى $level');
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _levelDialog(int level) async {
+    final custom = BadgeStore.levelUrls.containsKey(level);
+    final a = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('المستوى $level'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          LevelBadge(level: level, size: 110),
+          const SizedBox(height: 8),
+          Text('يحتاج ${50 * (level - 1) * (level - 1)} نقطة',
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        ]),
+        actions: [
+          if (custom)
+            TextButton(onPressed: () => Navigator.pop(d, 'reset'), child: const Text('استعادة الأصلية')),
+          TextButton(onPressed: () => Navigator.pop(d), child: const Text('إغلاق')),
+          FilledButton(onPressed: () => Navigator.pop(d, 'up'), child: const Text('تغيير الصورة')),
+        ],
+      ),
+    );
+    if (a == 'up') {
+      await _setLevelImage(level);
+    } else if (a == 'reset') {
+      try {
+        await supa.from('level_badges').delete().eq('level', level);
+        await BadgeStore.ensure(force: true);
+      } catch (e) {
+        if (mounted) toast(context, friendlyError(e));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final titles = BadgeStore.titles;
+    final maxL = BadgeStore.maxLevel;
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      SegmentedButton<int>(
+        segments: const [
+          ButtonSegment(value: 0, label: Text('الألقاب')),
+          ButtonSegment(value: 1, label: Text('المستويات')),
+        ],
+        selected: {_mode},
+        onSelectionChanged: (v) => setState(() => _mode = v.first),
+      ),
+      const SizedBox(height: 12),
+      if (_mode == 0) ...[
+        FilledButton.icon(
+          onPressed: () => _editTitle(null),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('إضافة لقب جديد'),
+        ),
+        const SizedBox(height: 10),
+        for (final t in titles)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GlassCard(
+              child: ListTile(
+                leading: SizedBox(width: 70, child: TitleDefImage(def: t, height: 40)),
+                title: Text(t.name),
+                subtitle: Text('من المستوى ${t.fromLevel}'),
+                trailing: const Icon(Icons.edit_rounded, size: 18),
+                onTap: () => _editTitle(t),
+              ),
+            ),
+          ),
+      ] else ...[
+        FilledButton.icon(
+          onPressed: _busy ? null : () => _setLevelImage(maxL + 1),
+          icon: const Icon(Icons.add_rounded),
+          label: Text('إضافة المستوى ${maxL + 1}'),
+        ),
+        const SizedBox(height: 6),
+        const Text('اضغط على أي مستوى لتغيير شكله. المستوى L يحتاج 50×(L-1)² نقطة.',
+            style: TextStyle(fontSize: 12, color: Colors.white60)),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 5,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          children: [
+            for (var l = 1; l <= maxL; l++)
+              GestureDetector(
+                onTap: () => _levelDialog(l),
+                child: Column(children: [
+                  Expanded(child: LevelBadge(level: l, size: 52)),
+                  Text('$l${BadgeStore.levelUrls.containsKey(l) ? ' ✎' : ''}',
+                      style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                ]),
+              ),
+          ],
+        ),
+      ],
     ]);
   }
 }

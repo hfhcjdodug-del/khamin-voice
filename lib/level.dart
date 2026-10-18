@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'main.dart';
 import 'theme.dart';
 
 /// المستوى يزيد ببطء: المستوى L يحتاج 50*(L-1)^2 نقطة.
@@ -120,11 +121,83 @@ const titleNames = [
   'الأسطورة', 'سيد الكون', 'المهيب', 'الخالد', 'الأسطورة المطلقة',
 ];
 
-int _cl(int level) => level < 1 ? 1 : (level > 50 ? 50 : level);
+class TitleDef {
+  final int idx;
+  final int fromLevel;
+  final String name;
+  final String? url; // صورة مرفوعة من المدير
+  final String? asset; // صورة مدمجة في التطبيق
+  const TitleDef(this.idx, this.fromLevel, this.name, {this.url, this.asset});
+}
 
-/// كل لقب يغطي مستويين: (1-2) المبتدئ، (3-4) الحالم ...
-int titleIndex(int level) => (_cl(level) - 1) ~/ 2;
-String titleName(int level) => titleNames[titleIndex(level)];
+/// ألقاب ومستويات قابلة للتعديل من لوحة المدير (جدولا level_badges و title_defs)،
+/// وإن لم تُعدَّل تبقى الصور الأصلية المدمجة في التطبيق.
+class BadgeStore {
+  static final ValueNotifier<int> version = ValueNotifier(0);
+  static final Map<int, String> _levelUrls = {};
+  static List<TitleDef> _titles = _defaults();
+  static bool _loaded = false;
+  static bool _loading = false;
+
+  static List<TitleDef> _defaults() => [
+        for (var i = 0; i < titleNames.length; i++)
+          TitleDef(i, i * 2 + 1, titleNames[i], asset: 'assets/titles/${i + 1}.png'),
+      ];
+
+  static List<TitleDef> get titles => _titles;
+  static Map<int, String> get levelUrls => _levelUrls;
+  static int get maxLevel => _levelUrls.keys.fold<int>(50, max);
+
+  /// يحمّل مرة واحدة (بعد تسجيل الدخول)، و force لإعادة التحميل بعد تعديل المدير.
+  static Future<void> ensure({bool force = false}) async {
+    if (_loading || (_loaded && !force)) return;
+    if (supa.auth.currentUser == null) return;
+    _loading = true;
+    try {
+      final lv = await supa.from('level_badges').select();
+      final td = await supa.from('title_defs').select();
+      _levelUrls
+        ..clear()
+        ..addEntries([
+          for (final r in lv as List) MapEntry((r['level'] as num).toInt(), r['image_url'] as String),
+        ]);
+      final byIdx = {for (final t in _defaults()) t.idx: t};
+      for (final r in td as List) {
+        final i = (r['idx'] as num).toInt();
+        final base = byIdx[i];
+        final u = r['image_url'] as String?;
+        byIdx[i] = TitleDef(i, (r['from_level'] as num).toInt(), r['name'] as String,
+            url: (u == null || u.isEmpty) ? null : u, asset: base?.asset);
+      }
+      final l = byIdx.values.toList()
+        ..sort((a, b) {
+          final c = a.fromLevel.compareTo(b.fromLevel);
+          return c != 0 ? c : a.idx.compareTo(b.idx);
+        });
+      _titles = l;
+      _loaded = true;
+      version.value++;
+    } catch (_) {
+      // الجداول غير موجودة (v19 لم تُشغَّل): نبقى على الأصلي
+    }
+    _loading = false;
+  }
+}
+
+int _cl(int level) => level < 1 ? 1 : level;
+
+/// فهرس اللقب (في القائمة المرتبة) الذي يغطي هذا المستوى.
+int titleIndex(int level) {
+  final l = BadgeStore.titles;
+  var r = 0;
+  for (var i = 0; i < l.length; i++) {
+    if (l[i].fromLevel <= level) r = i;
+  }
+  return r;
+}
+
+TitleDef titleDefOf(int level) => BadgeStore.titles[titleIndex(level)];
+String titleName(int level) => titleDefOf(level).name;
 
 /// شارة المستوى (حرّة بدون إطار مربع).
 class LevelBadge extends StatelessWidget {
@@ -133,13 +206,28 @@ class LevelBadge extends StatelessWidget {
   const LevelBadge({super.key, required this.level, this.size = 28});
 
   @override
-  Widget build(BuildContext context) => Image.asset(
-        'assets/levels/${_cl(level)}.png',
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
-      );
+  Widget build(BuildContext context) {
+    BadgeStore.ensure();
+    return ValueListenableBuilder<int>(
+      valueListenable: BadgeStore.version,
+      builder: (_, __, ___) {
+        final lv = _cl(level);
+        final url = BadgeStore.levelUrls[lv];
+        final blank = SizedBox(width: size, height: size);
+        if (url != null) {
+          return Image.network(url,
+              width: size, height: size, fit: BoxFit.contain, errorBuilder: (_, __, ___) => blank);
+        }
+        return Image.asset(
+          'assets/levels/${lv > 50 ? 50 : lv}.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => blank,
+        );
+      },
+    );
+  }
 }
 
 /// صورة اللقب (الاسم مكتوب داخل الصورة نفسها).
@@ -149,13 +237,34 @@ class TitleImage extends StatelessWidget {
   const TitleImage({super.key, required this.level, this.height = 28});
 
   @override
-  Widget build(BuildContext context) => Image.asset(
-        'assets/titles/${titleIndex(level) + 1}.png',
-        height: height,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => Text(titleName(level),
-            style: TextStyle(fontSize: height * 0.4, color: Colors.white70)),
-      );
+  Widget build(BuildContext context) {
+    BadgeStore.ensure();
+    return ValueListenableBuilder<int>(
+      valueListenable: BadgeStore.version,
+      builder: (_, __, ___) => TitleDefImage(def: titleDefOf(level), height: height),
+    );
+  }
+}
+
+/// يرسم لقباً محدداً (يُستعمل في قائمة الألقاب ولوحة المدير).
+class TitleDefImage extends StatelessWidget {
+  final TitleDef def;
+  final double height;
+  const TitleDefImage({super.key, required this.def, this.height = 28});
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Text(def.name, style: TextStyle(fontSize: height * 0.4, color: Colors.white70));
+    if (def.url != null) {
+      return Image.network(def.url!,
+          height: height, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
+    }
+    if (def.asset != null) {
+      return Image.asset(def.asset!,
+          height: height, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
+    }
+    return fallback;
+  }
 }
 
 DateTime? _dt(Object? v) => v == null ? null : DateTime.tryParse(v.toString())?.toLocal();

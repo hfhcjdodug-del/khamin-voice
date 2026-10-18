@@ -1257,7 +1257,8 @@ class _RoomScreenState extends State<RoomScreen> {
               children: [
                 tile(Icons.edit_rounded, 'اسم الروم', _renameRoom),
                 tile(Icons.mic_external_on_rounded, 'المايكات', _micModeSheet),
-                tile(Icons.wallpaper_rounded, 'الخلفية', _settingsSheet),
+                tile(Icons.wallpaper_rounded, 'الخلفية', _bgSheet),
+                tile(Icons.mic_external_on_rounded, 'شكل المايك', _settingsSheet),
                 tile(_look['locked'] == true ? Icons.lock_rounded : Icons.lock_open_rounded,
                     'كلمة السر', _toggleLock,
                     color: _look['locked'] == true ? const Color(0xFFFDE68A) : null),
@@ -1274,11 +1275,8 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  Future<void> _settingsSheet() async {
-    var bg = (_look['bg_preset'] ?? 'violet') as String;
-    var bgUrl = _look['bg_url'] as String?;
-    var skin = (_look['mic_skin'] ?? 'none') as String;
-    var skinUrl = _look['mic_skin_url'] as String?;
+  /// خلفيات الغرفة: شبكة من 3 أعمدة، بعضها مجاني وبعضها يُشترى بسعر يحدده المدير.
+  Future<void> _bgSheet() async {
     var catalog = <Map<String, dynamic>>[];
     final owned = <String>{};
     try {
@@ -1288,43 +1286,184 @@ class _RoomScreenState extends State<RoomScreen> {
       for (final r in o as List) {
         owned.add(r['bg_id'] as String);
       }
-    } catch (_) {
-      // قاعدة بلا v14: لا كتالوج
-    }
+    } catch (_) {}
+    if (!mounted) return;
+    final skin = (_look['mic_skin'] ?? 'none') as String;
+    final skinUrl = _look['mic_skin_url'] as String?;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (c) => StatefulBuilder(builder: (c, setS) {
+        var curUrl = _look['bg_url'] as String?;
+        final curPreset = (_look['bg_preset'] ?? 'violet') as String;
+
+        Future<void> pick(Map<String, dynamic> b) async {
+          final id = b['id'] as String;
+          final price = (b['price'] as num).toInt();
+          if (price > 0 && !owned.contains(id)) {
+            final yes = await showDialog<bool>(
+              context: context,
+              builder: (d) => AlertDialog(
+                title: Text('شراء «${b['name']}»'),
+                content: Text('السعر $price جوهرة، تشتريها مرة واحدة وتبقى لك.'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+                  FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('شراء')),
+                ],
+              ),
+            );
+            if (yes != true) return;
+            try {
+              await supa.rpc('buy_room_background', params: {'p_bg': id});
+              owned.add(id);
+            } catch (e) {
+              if (mounted) toast(context, friendlyError(e));
+              return;
+            }
+          }
+          await _saveLook(curPreset, b['image_url'] as String, skin, skinUrl);
+          _look['bg_url'] = b['image_url'];
+          setS(() {});
+        }
+
+        Future<void> pickDefault() async {
+          await _saveLook('violet', null, skin, skinUrl);
+          _look['bg_url'] = null;
+          _look['bg_preset'] = 'violet';
+          setS(() {});
+        }
+
+        const ink = Color(0xFF1F1B2E);
+        const violet = Color(0xFF7C3AED);
+        Widget cell({
+          required Widget bg,
+          required String label,
+          required bool selected,
+          String? badge,
+          required VoidCallback onTap,
+        }) =>
+            GestureDetector(
+              onTap: onTap,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: selected ? violet : Colors.transparent, width: 3),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(13),
+                  child: Stack(fit: StackFit.expand, children: [
+                    bg,
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 44,
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [Color(0xCC000000), Color(0x00000000)]),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: 6,
+                      child: Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ),
+                    if (badge != null)
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                              color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+                          child: Text(badge,
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
+                        ),
+                      ),
+                    if (selected)
+                      const Positioned(
+                        top: 6,
+                        left: 6,
+                        child: CircleAvatar(
+                            radius: 10,
+                            backgroundColor: violet,
+                            child: Icon(Icons.check_rounded, size: 14, color: Colors.white)),
+                      ),
+                  ]),
+                ),
+              ),
+            );
+
+        return Container(
+          height: MediaQuery.of(c).size.height * 0.62,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(color: ink),
+            child: Column(children: [
+              const SizedBox(height: 16),
+              const Text('خلفية', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 12),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 3,
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 1,
+                  children: [
+                    cell(
+                      bg: DecoratedBox(decoration: BoxDecoration(gradient: roomBgOf('violet').gradient)),
+                      label: 'الخلفية الافتراضية',
+                      selected: (curUrl == null || curUrl.isEmpty) && curPreset == 'violet',
+                      onTap: pickDefault,
+                    ),
+                    for (final b in catalog)
+                      cell(
+                        bg: Image.network(b['image_url'] as String,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF312E81))),
+                        label: b['name'] as String,
+                        selected: curUrl == b['image_url'],
+                        badge: (b['price'] as num) == 0 || owned.contains(b['id'])
+                            ? null
+                            : '💎 ${b['price']}',
+                        onTap: () => pick(b),
+                      ),
+                  ],
+                ),
+              ),
+            ]),
+          ),
+        );
+      }),
+    );
+  }
+
+  Future<void> _settingsSheet() async {
+    var bg = (_look['bg_preset'] ?? 'violet') as String;
+    var bgUrl = _look['bg_url'] as String?;
+    var skin = (_look['mic_skin'] ?? 'none') as String;
+    var skinUrl = _look['mic_skin_url'] as String?;
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (c) => StatefulBuilder(
         builder: (c, setS) {
-          Future<void> pickCatalog(Map<String, dynamic> b) async {
-            final id = b['id'] as String;
-            final price = (b['price'] as num).toInt();
-            if (price > 0 && !owned.contains(id)) {
-              final yes = await showDialog<bool>(
-                context: context,
-                builder: (d) => AlertDialog(
-                  title: Text('شراء «${b['name']}»'),
-                  content: Text('السعر $price جوهرة، تشتريها مرة واحدة وتبقى لك.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
-                    FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('شراء')),
-                  ],
-                ),
-              );
-              if (yes != true) return;
-              try {
-                await supa.rpc('buy_room_background', params: {'p_bg': id});
-                owned.add(id);
-              } catch (e) {
-                if (mounted) toast(context, friendlyError(e));
-                return;
-              }
-            }
-            setS(() => bgUrl = b['image_url'] as String);
-            await _saveLook(bg, bgUrl, skin, skinUrl);
-          }
-
           Widget upTile(String label, String? url, Future<void> Function() onTap) => GestureDetector(
                 onTap: onTap,
                 child: Container(
@@ -1350,77 +1489,9 @@ class _RoomScreenState extends State<RoomScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('إعدادات الغرفة',
+                const Text('إطار المايكات',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 14),
-                const Text('خلفية الغرفة', style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 70,
-                  child: ListView(scrollDirection: Axis.horizontal, children: [
-                    upTile('رفع صورة', bgUrl, () async {
-                      final u = await _pickImage();
-                      if (u != null) {
-                        setS(() => bgUrl = u);
-                        await _saveLook(bg, bgUrl, skin, skinUrl);
-                      }
-                    }),
-                    for (final b in catalog)
-                      GestureDetector(
-                        onTap: () => pickCatalog(b),
-                        child: Container(
-                          width: 70,
-                          height: 70,
-                          margin: const EdgeInsetsDirectional.only(end: 8),
-                          alignment: Alignment.bottomCenter,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            image: DecorationImage(image: NetworkImage(b['image_url'] as String), fit: BoxFit.cover),
-                            border: Border.all(
-                                color: bgUrl == b['image_url'] ? Colors.white : Colors.white24,
-                                width: bgUrl == b['image_url'] ? 2.5 : 1),
-                          ),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            decoration: const BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.vertical(bottom: Radius.circular(13))),
-                            child: Text(
-                              (b['price'] as num) == 0
-                                  ? 'مجانية'
-                                  : owned.contains(b['id']) ? 'مملوكة' : '💎 ${b['price']}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 10, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ),
-                    for (final pr in roomBgPresets)
-                      GestureDetector(
-                        onTap: () {
-                          setS(() {
-                            bg = pr.id;
-                            bgUrl = null;
-                          });
-                          _saveLook(bg, null, skin, skinUrl);
-                        },
-                        child: Container(
-                          width: 70,
-                          height: 70,
-                          margin: const EdgeInsetsDirectional.only(end: 8),
-                          decoration: BoxDecoration(
-                            gradient: pr.gradient,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                                color: bgUrl == null && bg == pr.id ? Colors.white : Colors.white24,
-                                width: bgUrl == null && bg == pr.id ? 2.5 : 1),
-                          ),
-                        ),
-                      ),
-                  ]),
-                ),
-                const SizedBox(height: 16),
                 const Text('خلفية المايكات', style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 SizedBox(
