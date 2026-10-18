@@ -313,14 +313,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .eq('id', m.first['room_id'])
             .eq('is_live', true)
             .maybeSingle();
-      } else {
-        room = await supa
-            .from('rooms')
-            .select('id,title,topic,host_id,is_live')
-            .eq('host_id', widget.userId)
-            .eq('is_live', true)
-            .limit(1)
-            .maybeSingle();
       }
       _live = room;
     } catch (_) {
@@ -600,21 +592,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
 
-  Widget _livePill() => GestureDetector(
-        onTap: () => openRoom(context, _live!),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 9, 14, 9),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFB07CFF)]),
-            borderRadius: BorderRadius.horizontal(right: Radius.circular(26)),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: const [
-            Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 6),
-            Text('غرفة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-          ]),
-        ),
-      );
+  Widget _livePill() => _LivePill(onTap: () => openRoom(context, _live!));
 
   Widget _header(Map<String, dynamic> p) {
     final h = (MediaQuery.sizeOf(context).height * 0.44).clamp(340.0, 440.0).toDouble();
@@ -1133,6 +1111,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
+      ),
+    );
+  }
+}
+
+
+/// زر «غرفة» يظهر فقط حين يكون المستخدم داخل غرفة: نبض خفيف وأعمدة صوت متحركة.
+class _LivePill extends StatefulWidget {
+  final VoidCallback onTap;
+  const _LivePill({required this.onTap});
+
+  @override
+  State<_LivePill> createState() => _LivePillState();
+}
+
+class _LivePillState extends State<_LivePill> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Widget _bar(double phase, double max) {
+    final t = (_c.value + phase) % 1.0;
+    final h = 5 + (max - 5) * (t < 0.5 ? t * 2 : (1 - t) * 2);
+    return Container(
+      width: 3.5,
+      height: h,
+      margin: const EdgeInsets.symmetric(horizontal: 1.2),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, __) => Transform.scale(
+          scale: 1 + 0.04 * _c.value,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 9, 14, 9),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFB07CFF)]),
+              borderRadius: const BorderRadius.horizontal(right: Radius.circular(26)),
+              boxShadow: [
+                BoxShadow(
+                    color: const Color(0xFFA855F7).withValues(alpha: 0.35 + 0.35 * _c.value),
+                    blurRadius: 10 + 10 * _c.value),
+              ],
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox(
+                height: 20,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  _bar(0.0, 18),
+                  _bar(0.3, 14),
+                  _bar(0.6, 18),
+                ]),
+              ),
+              const SizedBox(width: 6),
+              const Text('غرفة',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+            ]),
+          ),
+        ),
       ),
     );
   }

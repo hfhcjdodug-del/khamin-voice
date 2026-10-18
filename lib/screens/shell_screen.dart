@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../active_room.dart';
 import '../push.dart';
 import '../theme.dart';
 import 'guess_match_screen.dart';
@@ -9,6 +10,7 @@ import 'friends_tab.dart';
 import 'home_tab.dart';
 import 'watch_screen.dart';
 import 'profile_screen.dart';
+import 'room_screen.dart';
 import 'rooms_tab.dart';
 import '../main.dart';
 
@@ -132,11 +134,11 @@ class _ShellScreenState extends State<ShellScreen> {
       child: InkWell(
         onTap: () => setState(() => _i = idx),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(on ? sel : icon, color: on ? C.pink : Colors.white54, size: 26),
-          const SizedBox(height: 2),
+          Icon(on ? sel : icon, color: on ? C.pink : Colors.white54, size: 22),
+          const SizedBox(height: 1),
           Text(label,
               style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: on ? FontWeight.w800 : FontWeight.w500,
                   color: on ? Colors.white : Colors.white54)),
         ]),
@@ -146,6 +148,53 @@ class _ShellScreenState extends State<ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: ActiveRoom.expanded,
+      builder: (ctx, exp, _) => PopScope(
+        canPop: !exp,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) ActiveRoom.minimize();
+        },
+        child: Stack(children: [
+          _scaffold(),
+          ValueListenableBuilder<ActiveRoomData?>(
+            valueListenable: ActiveRoom.current,
+            builder: (ctx, d, _) {
+              if (d == null) return const SizedBox.shrink();
+              return Stack(children: [
+                // الغرفة تبقى حيّة (الصوت والحضور) حتى وهي مصغّرة
+                Positioned.fill(
+                  child: Offstage(
+                    offstage: !exp,
+                    child: TickerMode(
+                      enabled: exp,
+                      child: ScaffoldMessenger(
+                        child: RoomScreen(
+                          key: ValueKey(d.roomId),
+                          roomId: d.roomId,
+                          title: d.title,
+                          topic: d.topic,
+                          isHost: d.isHost,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (!exp)
+                  PositionedDirectional(
+                    end: 12,
+                    bottom: 74 + MediaQuery.paddingOf(context).bottom,
+                    child: _RoomBubble(data: d),
+                  ),
+              ]);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _scaffold() {
     return Scaffold(
       body: IndexedStack(index: _i, children: [
         HomeTab(active: _i == 0, onSeeRooms: () => setState(() => _i = 1)),
@@ -162,7 +211,7 @@ class _ShellScreenState extends State<ShellScreen> {
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 66,
+            height: 50,
             child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
               _navItem(0, Icons.sports_esports_outlined, Icons.sports_esports_rounded, 'ألعاب'),
               _navItem(1, Icons.meeting_room_outlined, Icons.meeting_room_rounded, 'الغرف'),
@@ -171,8 +220,8 @@ class _ShellScreenState extends State<ShellScreen> {
                   child: GestureDetector(
                     onTap: () => createRoomFlow(context),
                     child: Container(
-                      width: 58,
-                      height: 58,
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
@@ -180,9 +229,9 @@ class _ShellScreenState extends State<ShellScreen> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight),
                         border: Border.all(color: Colors.white24, width: 2),
-                        boxShadow: [BoxShadow(color: C.violet.withValues(alpha: 0.7), blurRadius: 18)],
+                        boxShadow: [BoxShadow(color: C.violet.withValues(alpha: 0.6), blurRadius: 12)],
                       ),
-                      child: const Icon(Icons.mic_rounded, size: 28),
+                      child: const Icon(Icons.mic_rounded, size: 22),
                     ),
                   ),
                 ),
@@ -192,6 +241,88 @@ class _ShellScreenState extends State<ShellScreen> {
             ]),
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// دائرة عائمة بصورة صاحب الغرفة: تظهر وأنا أتصفح التطبيق وما زلت داخل غرفة.
+class _RoomBubble extends StatefulWidget {
+  final ActiveRoomData data;
+  const _RoomBubble({required this.data});
+
+  @override
+  State<_RoomBubble> createState() => _RoomBubbleState();
+}
+
+class _RoomBubbleState extends State<_RoomBubble> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
+  String? _avatar;
+
+  @override
+  void initState() {
+    super.initState();
+    _avatar = widget.data.hostAvatar;
+    if ((_avatar == null || _avatar!.isEmpty) && widget.data.hostId != null) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('profiles').select('avatar_url').eq('id', widget.data.hostId!).maybeSingle();
+      final u = r?['avatar_url'] as String?;
+      if (mounted && u != null && u.isNotEmpty) setState(() => _avatar = u);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final has = _avatar != null && _avatar!.isNotEmpty;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) => SizedBox(
+        width: 66,
+        height: 66,
+        child: Stack(clipBehavior: Clip.none, children: [
+          GestureDetector(
+            onTap: () => ActiveRoom.expanded.value = true,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFA855F7), width: 3),
+                boxShadow: [
+                  BoxShadow(
+                      color: const Color(0xFFA855F7).withValues(alpha: 0.35 + 0.4 * _c.value),
+                      blurRadius: 8 + 10 * _c.value),
+                ],
+                color: const Color(0xFF312E81),
+                image: has ? DecorationImage(image: NetworkImage(_avatar!), fit: BoxFit.cover) : null,
+              ),
+              child: has ? null : const Icon(Icons.graphic_eq_rounded, color: Colors.white),
+            ),
+          ),
+          PositionedDirectional(
+            start: -4,
+            top: -4,
+            child: GestureDetector(
+              onTap: ActiveRoom.leave,
+              child: const CircleAvatar(
+                radius: 11,
+                backgroundColor: Color(0xFFEF4444),
+                child: Icon(Icons.close_rounded, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ]),
       ),
     );
   }

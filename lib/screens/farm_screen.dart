@@ -216,7 +216,7 @@ class _FarmScreenState extends State<FarmScreen> {
     final closed = _left <= 2;
     final daily = _n(s['daily_limit']), staked = _n(s['today_staked']);
     int myBet(int idx) => _n(mine['$idx']) + (_extra[idx] ?? 0);
-    return ListView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 24), children: [
+    return Padding(padding: const EdgeInsets.fromLTRB(12, 4, 12, 14), child: Column(children: [
       Row(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -239,13 +239,14 @@ class _FarmScreenState extends State<FarmScreen> {
       ]),
       const SizedBox(height: 8),
       // العجلة: 8 فقاعات حول دائرة العدّاد، والنقر على الفقاعة نفسها يرمي المبلغ
-      LayoutBuilder(builder: (ctx, c) {
-        final w = c.maxWidth;
+      Expanded(child: LayoutBuilder(builder: (ctx, c) {
+        final w = math.min(c.maxWidth, c.maxHeight);
         final d = w * 0.27;
         final R = (w - d) / 2 - 2;
         final h = 2 * R + d + 4;
         final cx = w / 2, cy = h / 2;
-        return SizedBox(
+        return Center(child: SizedBox(
+          width: w,
           height: h,
           child: Stack(children: [
             Positioned(
@@ -342,8 +343,8 @@ class _FarmScreenState extends State<FarmScreen> {
                 );
               }(),
           ]),
-        );
-      }),
+        ));
+      })),
       if (_banner != null)
         Container(
           padding: const EdgeInsets.all(10),
@@ -435,12 +436,6 @@ class _FarmScreenState extends State<FarmScreen> {
           ),
         ]),
       ),
-      const SizedBox(height: 12),
-      Text(
-        'الرهان بين ${s['min_bet']} و${s['max_bet']} 💎 للجولة. الجواهر تُخصم فوراً، والفوز يُضاف بعد السحب. العب بمسؤولية.',
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 11, color: Colors.white54, height: 1.6),
-      ),
-    ]);
+    ]));
   }
 }

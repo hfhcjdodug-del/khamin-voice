@@ -17,6 +17,7 @@ import '../songs.dart';
 import '../theme.dart';
 import '../widgets/trend_frame.dart';
 import 'chat_screen.dart';
+import '../active_room.dart';
 import 'farm_screen.dart';
 import 'profile_screen.dart';
 
@@ -143,10 +144,26 @@ class _RoomScreenState extends State<RoomScreen> {
     } catch (_) {}
   }
 
+  Future<void> _confirmLeave() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('الخروج من الغرفة؟'),
+        content: const Text('سينقطع صوتك عن الغرفة. للبقاء فيها وتصفح التطبيق اضغط السهم للأسفل لتصغيرها.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('خروج')),
+        ],
+      ),
+    );
+    if (ok == true) ActiveRoom.leave();
+  }
+
   Future<void> _openFarm() async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (c) => ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -201,7 +218,7 @@ class _RoomScreenState extends State<RoomScreen> {
       if (e.toString().contains('room locked')) {
         _closed = true;
         toast(context, 'الروم مقفلة 🔒');
-        Navigator.of(context).pop();
+        ActiveRoom.leave();
         return;
       }
       setState(() {
@@ -215,7 +232,7 @@ class _RoomScreenState extends State<RoomScreen> {
     if (_closed || !mounted) return;
     _closed = true;
     toast(context, 'تم طردك من هذه الغرفة');
-    Navigator.of(context).pop();
+    ActiveRoom.leave();
   }
 
   Future<void> _heartbeat() async {
@@ -224,14 +241,14 @@ class _RoomScreenState extends State<RoomScreen> {
       if (ok != true && mounted && !_closed) {
         _closed = true;
         toast(context, 'أنهى المضيف الغرفة');
-        Navigator.of(context).pop();
+        ActiveRoom.leave();
       }
     } catch (e) {
       if (e.toString().contains('kicked')) _handleKicked();
       if (e.toString().contains('room locked') && mounted && !_closed) {
         _closed = true;
         toast(context, 'الروم مقفلة 🔒 ادخل بكلمة السر');
-        Navigator.of(context).pop();
+        ActiveRoom.leave();
       }
     }
   }
@@ -1117,7 +1134,7 @@ class _RoomScreenState extends State<RoomScreen> {
     try {
       await supa.rpc('end_room', params: {'p_room': widget.roomId});
     } catch (_) {}
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) ActiveRoom.leave();
   }
 
   // ---------- إعدادات الغرفة (للمالك) ----------
@@ -1849,8 +1866,9 @@ class _RoomScreenState extends State<RoomScreen> {
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
               child: Row(children: [
                 IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_forward_ios_rounded, size: 20),
+                  tooltip: 'تصغير الغرفة',
+                  onPressed: ActiveRoom.minimize,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
                 ),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1885,6 +1903,11 @@ class _RoomScreenState extends State<RoomScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w800)),
                   ]),
                 ),
+                IconButton(
+                  tooltip: 'خروج من الغرفة',
+                  onPressed: _confirmLeave,
+                  icon: const Icon(Icons.power_settings_new_rounded, color: Color(0xFFFCA5A5)),
+                ),
                 if (_farmOn)
                   IconButton(
                     tooltip: 'المزرعة',
@@ -1918,6 +1941,7 @@ class _RoomScreenState extends State<RoomScreen> {
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: h * 0.50),
               child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
                 child: Column(children: [
                   Center(child: _seat(0)),
                   Padding(

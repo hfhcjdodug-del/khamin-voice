@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../active_room.dart';
 import '../main.dart';
 import '../room_look.dart';
 import '../songs.dart';
 import '../theme.dart';
-import 'room_screen.dart';
 
 /// يسأل عن كلمة سر الروم المقفلة. يرجع true إذا سُمح بالدخول.
 Future<bool> _askRoomPassword(BuildContext context, String roomId) async {
@@ -82,17 +82,16 @@ Future<void> openRoom(BuildContext context, Map<String, dynamic> r) async {
     }
   }
   if (!context.mounted) return;
-  await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => RoomScreen(
-        roomId: r['id'] as String,
-        title: r['title'] as String,
-        topic: (r['topic'] ?? '') as String,
-        isHost: r['host_id'] == myId,
-      ),
-    ),
-  );
+  // نرجع للشاشة الرئيسية (فوقها تُعرض الغرفة) ثم نفتح الغرفة
+  Navigator.of(context).popUntil((r) => r.isFirst);
+  await ActiveRoom.open(ActiveRoomData(
+    roomId: r['id'] as String,
+    title: r['title'] as String,
+    topic: (r['topic'] ?? '') as String,
+    isHost: r['host_id'] == myId,
+    hostId: r['host_id'] as String?,
+    hostAvatar: r['host_avatar'] as String?,
+  ));
 }
 
 /// نافذة إنشاء غرفة جديدة ثم الدخول إليها (تُستعمل من زر المايك الأوسط أيضاً).
@@ -458,26 +457,6 @@ class _RoomsTabState extends State<RoomsTab> {
           ]),
         ));
       }
-      rows.add(const SizedBox(height: 14));
-      rows.add(GestureDetector(
-        onTap: () async {
-          await createRoomFlow(context);
-          if (mounted) _load(silent: true);
-        },
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.add_circle_rounded, color: Colors.white),
-            SizedBox(width: 10),
-            Text('ابدأ غرفتك الآن',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
-          ]),
-        ),
-      ));
       return ListView(
         padding: const EdgeInsets.fromLTRB(12, 14, 12, 120),
         children: rows,
