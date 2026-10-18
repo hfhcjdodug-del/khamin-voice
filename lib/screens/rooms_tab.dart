@@ -391,7 +391,6 @@ class _RoomsTabState extends State<RoomsTab> {
             ),
           ],
         ],
-        _sectionTitle('✨ جديدة'),
         if (fresh.isEmpty && trend.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 40),

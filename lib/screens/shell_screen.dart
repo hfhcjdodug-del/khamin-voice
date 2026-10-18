@@ -164,8 +164,8 @@ class _ShellScreenState extends State<ShellScreen> {
           child: SizedBox(
             height: 66,
             child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'الرئيسية'),
-              _navItem(1, Icons.sports_esports_outlined, Icons.sports_esports_rounded, 'الغرف'),
+              _navItem(0, Icons.sports_esports_outlined, Icons.sports_esports_rounded, 'ألعاب'),
+              _navItem(1, Icons.meeting_room_outlined, Icons.meeting_room_rounded, 'الغرف'),
               Expanded(
                 child: Center(
                   child: GestureDetector(

@@ -72,7 +72,7 @@ class GamesTab extends StatefulWidget {
 
 class _GamesTabState extends State<GamesTab> {
   List<Map<String, dynamic>> _invites = [];
-  List<_GameDef> _list = _games;
+  List<_GameDef> _list = _games.where((g) => g.id != 'farm').toList();
   Timer? _timer;
 
   @override
@@ -112,6 +112,7 @@ class _GamesTabState extends State<GamesTab> {
           music: row['music_url'] as String?,
         ));
       }
+      out.removeWhere((g) => g.id == 'farm'); // المزرعة تُلعب داخل الروم
       if (mounted && out.isNotEmpty) setState(() => _list = out);
     } catch (_) {}
   }

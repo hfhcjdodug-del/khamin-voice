@@ -17,6 +17,7 @@ import '../songs.dart';
 import '../theme.dart';
 import '../widgets/trend_frame.dart';
 import 'chat_screen.dart';
+import 'farm_screen.dart';
 import 'profile_screen.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -129,6 +130,29 @@ class _RoomScreenState extends State<RoomScreen> {
     super.initState();
     Music.stop();
     _start();
+    _checkFarm();
+  }
+
+  bool _farmOn = false;
+
+  Future<void> _checkFarm() async {
+    try {
+      final r = await supa.rpc('farm_state');
+      final m = r is List ? (r.isEmpty ? null : r.first) : r;
+      if (m is Map && m['enabled'] == true && mounted) setState(() => _farmOn = true);
+    } catch (_) {}
+  }
+
+  Future<void> _openFarm() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (c) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: SizedBox(height: MediaQuery.of(c).size.height * 0.88, child: const FarmScreen()),
+      ),
+    );
   }
 
   Future<void> _start() async {
@@ -1790,6 +1814,12 @@ class _RoomScreenState extends State<RoomScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w800)),
                   ]),
                 ),
+                if (_farmOn)
+                  IconButton(
+                    tooltip: 'المزرعة',
+                    onPressed: _openFarm,
+                    icon: const Icon(Icons.agriculture_rounded, color: Color(0xFF86EFAC)),
+                  ),
                 if (_iAmOwner)
                   IconButton(
                     tooltip: 'قفل الروم',

@@ -113,7 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Row(children: [
-              const Icon(Icons.hexagon_rounded, color: red),
+              const Icon(Icons.diamond_rounded, color: Color(0xFFEF4444)),
               const SizedBox(width: 6),
               Text('$rubies', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
               const SizedBox(width: 4),

@@ -89,9 +89,7 @@ class _HomeTabState extends State<HomeTab> {
           onRefresh: _load,
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 120), children: [
             Row(children: [
-              Image.asset('assets/logo.png', width: 42, height: 42),
-              const SizedBox(width: 10),
-              const Text('نتونس', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+              const Text('نتونس', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
               const Spacer(),
               if (me != null)
                 Container(
@@ -104,9 +102,6 @@ class _HomeTabState extends State<HomeTab> {
                   ]),
                 ),
             ]),
-            const SizedBox(height: 6),
-            Text(me == null ? 'أهلاً بك 👋' : 'أهلاً ${me['name']} 👋',
-                style: const TextStyle(color: Colors.white70, fontSize: 15)),
             const SizedBox(height: 18),
             Row(children: [
               _quick(Icons.sports_esports_rounded, 'ألعاب', const [Color(0xFF7C3AED), C.pink], () {
