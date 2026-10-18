@@ -174,7 +174,7 @@ class _FarmScreenState extends State<FarmScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(16)),
             alignment: Alignment.center,
-            child: Text('💎 $_gems', style: const TextStyle(fontWeight: FontWeight.w900)),
+            child: GemAmount(_gems, style: const TextStyle(fontWeight: FontWeight.w900)),
           ),
         ],
       ),
@@ -332,7 +332,8 @@ class _FarmScreenState extends State<FarmScreen> {
                                     color: const Color(0xFF4C1D95),
                                     border: Border.all(color: const Color(0xFFFDE047)),
                                     borderRadius: BorderRadius.circular(10)),
-                                child: Text('💎 $bet',
+                                child: GemAmount(bet,
+                                    size: 12,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                               ),
                             ),
@@ -373,7 +374,8 @@ class _FarmScreenState extends State<FarmScreen> {
                     border: Border.all(
                         color: _stake == v ? Colors.white : Colors.white24, width: _stake == v ? 2 : 1),
                   ),
-                  child: Text('💎 $v',
+                  child: GemAmount(v,
+                      size: 18,
                       style: TextStyle(
                           fontWeight: FontWeight.w900,
                           color: _stake == v ? Colors.black : Colors.white)),
@@ -393,7 +395,7 @@ class _FarmScreenState extends State<FarmScreen> {
             decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14)),
             child: Column(children: [
               const Text('رصيدي', style: TextStyle(fontSize: 12, color: Colors.white70)),
-              Text('💎 $_gems', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+              GemAmount(_gems, size: 20, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
             ]),
           ),
         ),

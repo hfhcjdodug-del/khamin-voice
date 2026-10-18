@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'level.dart';
 import 'main.dart';
 import 'theme.dart';
+import 'widgets/gem_icon.dart';
 
 /// رصيد المستخدم: الجواهر وحالة «بدون إعلانات».
 Future<({int gems, bool adsFree, int rubyPts})> fetchWallet() async {
@@ -314,7 +315,7 @@ class _ShopScreenState extends State<ShopScreen> {
           border: Border.all(color: C.glassBorder),
         ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.diamond_rounded, size: 34, color: Color(0xFF67E8F9)),
+          const GemIcon(size: 34),
           const SizedBox(height: 4),
           Text(_fmt(gems), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
@@ -348,7 +349,7 @@ class _ShopScreenState extends State<ShopScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(children: [
-                    const Icon(Icons.diamond_rounded, size: 40, color: Colors.white),
+                    const GemIcon(size: 40),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

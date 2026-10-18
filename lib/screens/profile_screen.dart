@@ -18,6 +18,7 @@ import 'rewards_screen.dart';
 import 'rooms_tab.dart' show openRoom;
 import 'settings_screen.dart';
 import 'visitors_screen.dart';
+import '../widgets/gem_icon.dart';
 
 const _ink = Color(0xFF1F1B2E);
 const _ink2 = Color(0xFF4A4458);
@@ -99,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _loadWallet();
               },
               child: Row(children: [
-                const Icon(Icons.diamond_rounded, color: Color(0xFF67E8F9)),
+                const GemIcon(size: 24),
                 const SizedBox(width: 6),
                 Text('${w?.gems ?? 0}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                 const SizedBox(width: 4),
@@ -113,7 +114,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Row(children: [
-              const Icon(Icons.diamond_rounded, color: Color(0xFFEF4444)),
+              const GemIcon(size: 24, ruby: true),
               const SizedBox(width: 6),
               Text('$rubies', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
               const SizedBox(width: 4),
@@ -451,7 +452,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Row(children: [
         const Text('الهدايا المستلمة', style: TextStyle(fontWeight: FontWeight.w800)),
         const Spacer(),
-        const Icon(Icons.diamond_rounded, size: 14, color: Color(0xFF67E8F9)),
+        const GemIcon(size: 14),
         Text(' استلم $_giftRecv · أرسل $_giftSent',
             style: const TextStyle(color: _sub, fontSize: 12)),
       ]),

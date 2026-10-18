@@ -20,6 +20,7 @@ import 'chat_screen.dart';
 import '../active_room.dart';
 import 'farm_screen.dart';
 import 'profile_screen.dart';
+import '../widgets/gem_icon.dart';
 
 class RoomScreen extends StatefulWidget {
   final String roomId;
@@ -884,7 +885,7 @@ class _RoomScreenState extends State<RoomScreen> {
               Row(children: [
                 const Text('إهداء هدية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                 const Spacer(),
-                const Icon(Icons.diamond_rounded, size: 18, color: Color(0xFF67E8F9)),
+                const GemIcon(size: 18),
                 const SizedBox(width: 4),
                 Text('$gems', style: const TextStyle(fontWeight: FontWeight.w900)),
                 const SizedBox(width: 6),
@@ -1001,7 +1002,7 @@ class _RoomScreenState extends State<RoomScreen> {
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                  const Icon(Icons.diamond_rounded, size: 12, color: Color(0xFF67E8F9)),
+                                  const GemIcon(size: 12),
                                   Text(' ${g['price']}', style: const TextStyle(fontSize: 12, height: 1.1)),
                                 ]),
                               ),
@@ -1056,7 +1057,7 @@ class _RoomScreenState extends State<RoomScreen> {
               TextSpan(text: '  ${meta['name'] ?? ''} ×${meta['qty'] ?? 1}'),
             ])),
           ),
-          const Icon(Icons.diamond_rounded, size: 13, color: Color(0xFF67E8F9)),
+          const GemIcon(size: 13),
           Text(' $gems', style: const TextStyle(fontSize: 12)),
         ]),
       ),

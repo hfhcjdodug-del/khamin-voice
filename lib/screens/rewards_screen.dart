@@ -6,6 +6,7 @@ import '../ads.dart';
 import '../main.dart';
 import '../shop_screen.dart';
 import '../theme.dart';
+import '../widgets/gem_icon.dart';
 
 /// مكافآت مجانية: هدية يومية، روليت، ومهام يومية متبدّلة.
 class RewardsScreen extends StatefulWidget {
@@ -141,7 +142,7 @@ class _RewardsScreenState extends State<RewardsScreen> with SingleTickerProvider
   }
 
   Widget _gemChip(int n) => Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.diamond_rounded, size: 15, color: Color(0xFF67E8F9)),
+        const GemIcon(size: 15),
         const SizedBox(width: 3),
         Text('$n', style: const TextStyle(fontWeight: FontWeight.w900)),
       ]);
