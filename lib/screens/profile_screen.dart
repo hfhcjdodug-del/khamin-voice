@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../gift_image.dart';
 import '../level.dart';
 import '../main.dart';
 import '../shop_screen.dart';
@@ -15,7 +14,6 @@ import 'chat_screen.dart';
 import 'edit_profile_screen.dart';
 import 'profile_actions.dart';
 import 'rewards_screen.dart';
-import 'rooms_tab.dart' show openRoom;
 import 'settings_screen.dart';
 import 'visitors_screen.dart';
 import '../widgets/gem_icon.dart';
@@ -41,15 +39,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _p;
   bool _loading = true;
   bool _viewerAdmin = false;
-  List<Map<String, dynamic>> _gifts = [];
-  int _giftRecv = 0;
-  int _giftSent = 0;
   ({int gems, bool adsFree, int rubyPts})? _wallet;
   bool _converting = false;
   int _tab = 1; // 0 المنشورات، 1 الملف الشخصي، 2 الشرف، 3 العلاقة
   Map<String, dynamic> _extra = {}; // photos / tags / birthday (من v12)
   DateTime? _created;
-  Map<String, dynamic>? _live; // الغرفة المباشرة التي فيها المستخدم الآن
 
   bool get _isMe => widget.userId == myId;
 
@@ -165,7 +159,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         for (final k in const ['photos', 'tags', 'birthday'])
           if (widget.seed!.containsKey(k)) k: widget.seed![k]
       };
-      if (widget.seed!['live'] is Map) _live = Map<String, dynamic>.from(widget.seed!['live'] as Map);
     }
     _load();
     _loadExtra();
@@ -183,19 +176,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final a = await supa.rpc('am_i_admin');
       if (mounted) setState(() => _viewerAdmin = a == true);
-    } catch (_) {}
-    try {
-      final g = await supa.rpc('user_gifts', params: {'p_id': widget.userId}) as List;
-      final t = await supa.rpc('user_gift_totals', params: {'p_id': widget.userId}) as List;
-      if (mounted) {
-        setState(() {
-          _gifts = List<Map<String, dynamic>>.from(g);
-          if (t.isNotEmpty) {
-            _giftRecv = ((t.first as Map)['received'] as num?)?.toInt() ?? 0;
-            _giftSent = ((t.first as Map)['sent'] as num?)?.toInt() ?? 0;
-          }
-        });
-      }
     } catch (_) {}
     try {
       final r = await supa.rpc('get_profile', params: {'p_id': widget.userId}) as List;
@@ -298,27 +278,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .single();
       _extra = Map<String, dynamic>.from(r);
     } catch (_) {} // الأعمدة غير موجودة قبل تشغيل v12
-    try {
-      final since = DateTime.now().toUtc().subtract(const Duration(seconds: 45)).toIso8601String();
-      final m = await supa
-          .from('room_members')
-          .select('room_id')
-          .eq('user_id', widget.userId)
-          .gt('last_seen', since)
-          .limit(1);
-      Map<String, dynamic>? room;
-      if ((m as List).isNotEmpty) {
-        room = await supa
-            .from('rooms')
-            .select('id,title,topic,host_id,is_live')
-            .eq('id', m.first['room_id'])
-            .eq('is_live', true)
-            .maybeSingle();
-      }
-      _live = room;
-    } catch (_) {
-      _live = null;
-    }
     if (mounted) setState(() {});
   }
 
@@ -449,44 +408,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       const SizedBox(height: 14),
-      Row(children: [
-        const Text('الهدايا المستلمة', style: TextStyle(fontWeight: FontWeight.w800)),
-        const Spacer(),
-        const GemIcon(size: 14),
-        Text(' استلم $_giftRecv · أرسل $_giftSent',
-            style: const TextStyle(color: _sub, fontSize: 12)),
-      ]),
-      const SizedBox(height: 8),
-      if (_gifts.isEmpty)
-        const Text('لم يستلم هدايا بعد', style: TextStyle(color: _sub, fontSize: 13))
-      else
-        GridView.count(
-          crossAxisCount: 4,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 0.85,
-          children: [
-            for (final g in _gifts)
-              Container(
-                decoration: BoxDecoration(
-                  color: _soft,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _line),
-                ),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  GiftImage(
-                      image: g['image_url'] as String?,
-                      emoji: (g['emoji'] ?? '🎁') as String,
-                      size: 44),
-                  const SizedBox(height: 2),
-                  Text('×${g['qty']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                ]),
-              ),
-          ],
-        ),
-      const SizedBox(height: 14),
       const Text('الإنجازات', style: TextStyle(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       Wrap(spacing: 10, runSpacing: 12, children: [
@@ -593,8 +514,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
 
-  Widget _livePill() => _LivePill(onTap: () => openRoom(context, _live!));
-
   Widget _header(Map<String, dynamic> p) {
     final h = (MediaQuery.sizeOf(context).height * 0.44).clamp(340.0, 440.0).toDouble();
     final cover = (p['cover_url'] ?? '') as String;
@@ -646,7 +565,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        if (_live != null) Positioned(left: 0, top: h * 0.27, child: _livePill()),
         // الصورة والاسم والأرقام (يمين الغلاف)
         Positioned(
           right: 16,
@@ -1038,13 +956,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
         _bbItem(Icons.ios_share_rounded, const [Color(0xFFFF8A5B), Color(0xFFA855F7)], 'مشاركة', () => _share(p)),
-        _bbItem(Icons.home_rounded, const [Color(0xFF8B5CF6), Color(0xFFB07CFF)], 'غرفة', () {
-          if (_live != null) {
-            openRoom(context, _live!);
-          } else {
-            toast(context, 'ليس في غرفة الآن');
-          }
-        }),
         _bbItem(f ? Icons.check_rounded : Icons.add_rounded, const [Color(0xFF7C3AED), Color(0xFF8B5CF6)],
             f ? 'تتابعه' : 'متابعة', _toggleFollow,
             big: true),
@@ -1118,71 +1029,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 
-/// زر «غرفة» يظهر فقط حين يكون المستخدم داخل غرفة: نبض خفيف وأعمدة صوت متحركة.
-class _LivePill extends StatefulWidget {
-  final VoidCallback onTap;
-  const _LivePill({required this.onTap});
-
-  @override
-  State<_LivePill> createState() => _LivePillState();
-}
-
-class _LivePillState extends State<_LivePill> with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  Widget _bar(double phase, double max) {
-    final t = (_c.value + phase) % 1.0;
-    final h = 5 + (max - 5) * (t < 0.5 ? t * 2 : (1 - t) * 2);
-    return Container(
-      width: 3.5,
-      height: h,
-      margin: const EdgeInsets.symmetric(horizontal: 1.2),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (_, __) => Transform.scale(
-          scale: 1 + 0.04 * _c.value,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 9, 14, 9),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFB07CFF)]),
-              borderRadius: const BorderRadius.horizontal(right: Radius.circular(26)),
-              boxShadow: [
-                BoxShadow(
-                    color: const Color(0xFFA855F7).withValues(alpha: 0.35 + 0.35 * _c.value),
-                    blurRadius: 10 + 10 * _c.value),
-              ],
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              SizedBox(
-                height: 20,
-                child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                  _bar(0.0, 18),
-                  _bar(0.3, 14),
-                  _bar(0.6, 18),
-                ]),
-              ),
-              const SizedBox(width: 6),
-              const Text('غرفة',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
-}

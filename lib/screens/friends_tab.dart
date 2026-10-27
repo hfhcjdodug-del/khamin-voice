@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../theme.dart';
-import 'messages_tab.dart';
 import 'profile_screen.dart';
 import 'search_tab.dart';
 
@@ -13,17 +12,16 @@ class FriendsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('الأصدقاء', style: TextStyle(fontWeight: FontWeight.w900)),
           bottom: const TabBar(
             indicatorColor: C.pink,
-            tabs: [Tab(text: 'الرسائل'), Tab(text: 'أصدقائي'), Tab(text: 'بحث')],
+            tabs: [Tab(text: 'أصدقائي'), Tab(text: 'بحث')],
           ),
         ),
         body: TabBarView(children: [
-          MessagesTab(active: active, embedded: true),
           _FollowingList(active: active),
           const SearchTab(),
         ]),

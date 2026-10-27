@@ -7,7 +7,6 @@ import '../main.dart';
 import 'rewards_screen.dart';
 import '../shop_screen.dart';
 import '../theme.dart';
-import 'farm_screen.dart';
 import 'guess_lobby_screen.dart';
 import 'guess_match_screen.dart';
 
@@ -112,7 +111,7 @@ class _GamesTabState extends State<GamesTab> {
           music: row['music_url'] as String?,
         ));
       }
-      out.removeWhere((g) => g.id == 'farm'); // المزرعة تُلعب داخل الروم
+      out.removeWhere((g) => g.id == 'farm'); // المزرعة غير متاحة هنا
       if (mounted && out.isNotEmpty) setState(() => _list = out);
     } catch (_) {}
   }
@@ -157,10 +156,6 @@ class _GamesTabState extends State<GamesTab> {
   void _open(_GameDef g) {
     if (!g.ready) {
       toast(context, 'قريباً... ${g.title}');
-      return;
-    }
-    if (g.id == 'farm') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const FarmScreen()));
       return;
     }
     Navigator.push(

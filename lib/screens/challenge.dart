@@ -3,56 +3,14 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../theme.dart';
 import 'guess_lobby_screen.dart';
-import 'movies_tab.dart';
 
-/// قائمة من المحادثة: تحدّي لعبة أو مشاهدة فيلم مع هذا الصديق.
+/// قائمة من المحادثة: تحدّي لعبة مع هذا الصديق.
 Future<void> showFriendActions(
   BuildContext context, {
   required String peerId,
   required String peerName,
 }) async {
-  final choice = await showModalBottomSheet<String>(
-    context: context,
-    builder: (c) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('مع $peerName',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: GradButton(
-              label: 'تحدّي في لعبة',
-              icon: Icons.sports_esports_rounded,
-              onPressed: () => Navigator.pop(c, 'game'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: GradButton(
-              label: 'مشاهدة فيلم معاً',
-              icon: Icons.movie_rounded,
-              outlined: true,
-              onPressed: () => Navigator.pop(c, 'movie'),
-            ),
-          ),
-        ]),
-      ),
-    ),
-  );
-  if (!context.mounted || choice == null) return;
-  if (choice == 'game') {
-    await _challengeGame(context, peerId, peerName);
-  } else {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MoviePickScreen(friendId: peerId, friendName: peerName),
-      ),
-    );
-  }
+  await _challengeGame(context, peerId, peerName);
 }
 
 Future<void> _challengeGame(BuildContext context, String peerId, String peerName) async {
