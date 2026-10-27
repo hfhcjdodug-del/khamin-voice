@@ -20,11 +20,15 @@ const _testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
 const _testRewarded = 'ca-app-pub-3940256099942544/5224354917';
 
 bool? _testMode;
+String? _testModeUser;
 
 Future<bool> _useTest() async {
-  if (_testMode != null) return _testMode!;
+  // النتيجة مرتبطة بالحساب: تتغيّر إن بدّل المستخدم حسابه دون إغلاق التطبيق
+  final uid = supa.auth.currentUser?.id;
+  if (_testMode != null && _testModeUser == uid) return _testMode!;
   try {
     _testMode = (await supa.rpc('am_i_admin')) == true;
+    _testModeUser = uid;
   } catch (_) {
     return true; // عند الشك نستعمل التجريبي (أأمن)، ولا نخزّن النتيجة
   }
@@ -39,6 +43,12 @@ InterstitialAd? _inter;
 DateTime _lastInter = DateTime.fromMillisecondsSinceEpoch(0);
 
 Future<void> initAds() async {
+  try {
+    supa.auth.onAuthStateChange.listen((_) {
+      _testMode = null;
+      _adsFree = null;
+    });
+  } catch (_) {}
   if (!Platform.isAndroid) return;
   try {
     await MobileAds.instance.initialize();
