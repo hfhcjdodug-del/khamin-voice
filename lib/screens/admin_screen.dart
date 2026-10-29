@@ -69,7 +69,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 10,
+      length: 11,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -87,6 +87,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'الألقاب والمستويات'),
               Tab(text: 'طريقة اللعب'),
               Tab(text: 'الجولات والأسعار'),
+              Tab(text: 'شاشة الدخول'),
             ],
           ),
         ),
@@ -101,6 +102,7 @@ class AdminScreen extends StatelessWidget {
           _BadgesAdminTab(),
           _TutorialAdminTab(),
           _PlaySettingsTab(),
+          _LoginMediaTab(),
         ]),
       ),
     );
@@ -778,7 +780,28 @@ class _NoticesAdminTabState extends State<_NoticesAdminTab> {
         toast(context, 'فشل الإرسال: ${d is Map ? d['error'] : d}');
       }
     } catch (e) {
-      if (mounted) toast(context, 'فشل الإرسال: ${friendlyError(e)}');
+      // الدالة غير منشورة بعد في Supabase: نحفظ الإشعار داخل التطبيق مباشرة على الأقل
+      if (e.toString().contains('404') || e.toString().contains('NOT_FOUND')) {
+        try {
+          final u = _url.text.trim();
+          await supa.from('app_notifications').insert({
+            'title': _title.text.trim(),
+            'body': _body.text.trim(),
+            'kind': _kind,
+            'url': u.startsWith('http') ? u : null,
+          });
+          if (mounted) {
+            toast(context, 'وصل داخل التطبيق فقط. إشعار النظام يحتاج نشر دالة send-push');
+            _title.clear();
+            _body.clear();
+            _url.clear();
+          }
+        } catch (e2) {
+          if (mounted) toast(context, 'فشل الإرسال: ${friendlyError(e2)}');
+        }
+      } else if (mounted) {
+        toast(context, 'فشل الإرسال: ${friendlyError(e)}');
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -1747,6 +1770,118 @@ class _PlaySettingsTabState extends State<_PlaySettingsTab> {
           ),
         ),
       GradButton(label: _saving ? 'جارٍ الحفظ…' : 'حفظ', onPressed: _saving ? null : _save),
+    ]);
+  }
+}
+
+
+// ===================== فيديو شاشة الدخول =====================
+class _LoginMediaTab extends StatefulWidget {
+  const _LoginMediaTab();
+
+  @override
+  State<_LoginMediaTab> createState() => _LoginMediaTabState();
+}
+
+class _LoginMediaTabState extends State<_LoginMediaTab> {
+  static const _maxMb = 12;
+  String _url = '';
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.rpc('login_media');
+      if (mounted) setState(() => _url = (r ?? '').toString());
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _pick() async {
+    final r = await FilePicker.platform.pickFiles(type: FileType.video, withData: true);
+    if (r == null || r.files.isEmpty) return;
+    final f = r.files.first;
+    final bytes = f.bytes;
+    if (bytes == null) {
+      toast(context, 'تعذّرت قراءة الملف');
+      return;
+    }
+    final mb = bytes.length / (1024 * 1024);
+    if (mb > _maxMb) {
+      toast(context, 'الفيديو ${mb.toStringAsFixed(1)} ميغا، والحد $_maxMb ميغا. قصّره أو اخفض جودته (720p)');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final ext = extOf(f.name, ['mp4', 'webm', 'mov'], 'mp4');
+      final url = await uploadMedia(
+        bucket: 'game-media',
+        folder: 'login',
+        bytes: bytes,
+        ext: ext,
+        contentType: ext == 'mov' ? 'video/quicktime' : 'video/$ext',
+      );
+      await _setSetting('login_video', url);
+      if (mounted) {
+        setState(() => _url = url);
+        toast(context, 'تم رفع الفيديو (${mb.toStringAsFixed(1)} ميغا)');
+      }
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    setState(() => _busy = true);
+    try {
+      await _setSetting('login_video', '');
+      if (mounted) setState(() => _url = '');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Text('فيديو خلفية شاشة الدخول', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 6),
+      const Text(
+        'يظهر بتمويه خفيف خلف أزرار الدخول، بدون صوت ويعيد نفسه.\n'
+        'الحد الأقصى $_maxMb ميغا. الأفضل: عمودي (9:16)، 720p، من 8 إلى 15 ثانية، صيغة MP4.',
+        style: TextStyle(color: Colors.white60, height: 1.6),
+      ),
+      const SizedBox(height: 14),
+      GlassCard(
+        child: Row(children: [
+          Icon(_url.isEmpty ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+              color: _url.isEmpty ? Colors.white38 : C.pink),
+          const SizedBox(width: 10),
+          Expanded(child: Text(_url.isEmpty ? 'لا يوجد فيديو (تظهر خلفية بنفسجية)' : 'يوجد فيديو مرفوع',
+              style: const TextStyle(fontWeight: FontWeight.w700))),
+        ]),
+      ),
+      const SizedBox(height: 14),
+      GradButton(
+        label: _busy ? 'جارٍ الرفع…' : (_url.isEmpty ? 'رفع فيديو' : 'استبدال الفيديو'),
+        icon: Icons.upload_rounded,
+        onPressed: _busy ? null : _pick,
+      ),
+      if (_url.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        GradButton(label: 'حذف الفيديو', icon: Icons.delete_outline_rounded, outlined: true, onPressed: _busy ? null : _remove),
+      ],
     ]);
   }
 }

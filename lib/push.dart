@@ -64,31 +64,80 @@ class NoticeListener {
     if (m == null) return;
     final url = r['url'] as String?;
     final kind = (r['kind'] ?? 'info') as String;
-    final icon = kind == 'update'
-        ? Icons.system_update_rounded
-        : (kind == 'alert' ? Icons.warning_amber_rounded : Icons.campaign_rounded);
+    final st = noticeStyle(kind);
+    final body = ((r['body'] ?? '') as String);
     m
-      ..hideCurrentMaterialBanner()
-      ..showMaterialBanner(MaterialBanner(
-        backgroundColor: const Color(0xFF2A1B52),
-        leading: Icon(icon, color: C.pink),
-        content: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(r['title'] as String, style: const TextStyle(fontWeight: FontWeight.w900)),
-          if (((r['body'] ?? '') as String).isNotEmpty)
-            Text(r['body'] as String, style: const TextStyle(fontSize: 13, color: Colors.white70)),
-        ]),
-        actions: [
-          if (url != null && url.isNotEmpty)
-            TextButton(
-                onPressed: () {
-                  m.hideCurrentMaterialBanner();
-                  openLink(url);
-                },
-                child: Text(kind == 'update' ? 'تحديث' : 'فتح')),
-          TextButton(onPressed: () => m.hideCurrentMaterialBanner(), child: const Text('إغلاق')),
-        ],
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        padding: EdgeInsets.zero,
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        duration: const Duration(seconds: 12),
+        content: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(colors: st.colors, begin: Alignment.topRight, end: Alignment.bottomLeft),
+            boxShadow: [BoxShadow(color: st.colors.first.withValues(alpha: 0.5), blurRadius: 18, offset: const Offset(0, 6))],
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
+              child: Icon(st.icon, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(st.label, style: const TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w700)),
+                Text(r['title'] as String,
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.white)),
+                if (body.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(body, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                  ),
+                if (url != null && url.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: GestureDetector(
+                      onTap: () {
+                        m.hideCurrentSnackBar();
+                        openLink(url);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                        child: Text(kind == 'update' ? 'تحديث الآن' : 'فتح',
+                            style: TextStyle(color: st.colors.last, fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                  ),
+              ]),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () => m.hideCurrentSnackBar(),
+              icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+            ),
+          ]),
+        ),
       ));
-    Future.delayed(const Duration(seconds: 12), () => m.hideCurrentMaterialBanner());
+  }
+}
+
+/// ألوان وأيقونة كل نوع إشعار.
+({IconData icon, List<Color> colors, String label}) noticeStyle(String kind) {
+  switch (kind) {
+    case 'update':
+      return (icon: Icons.system_update_rounded, colors: const [Color(0xFF10B981), Color(0xFF0EA5E9)], label: 'تحديث');
+    case 'alert':
+      return (icon: Icons.warning_amber_rounded, colors: const [Color(0xFFF59E0B), Color(0xFFEF4444)], label: 'تنبيه');
+    default:
+      return (icon: Icons.campaign_rounded, colors: const [Color(0xFF8B5CF6), Color(0xFFEC4899)], label: 'إعلان');
   }
 }
 
@@ -143,31 +192,45 @@ class _NoticesScreenState extends State<NoticesScreen> {
                       final r = _items[i];
                       final kind = (r['kind'] ?? 'info') as String;
                       final url = r['url'] as String?;
-                      return GlassCard(
+                      final st = noticeStyle(kind);
+                      return GestureDetector(
                         onTap: url != null && url.isNotEmpty ? () => openLink(url) : null,
-                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Icon(
-                              kind == 'update'
-                                  ? Icons.system_update_rounded
-                                  : (kind == 'alert' ? Icons.warning_amber_rounded : Icons.campaign_rounded),
-                              color: kind == 'alert' ? C.orange : C.violet),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(r['title'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              if (((r['body'] ?? '') as String).isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(r['body'] as String, style: const TextStyle(color: Colors.white70)),
-                                ),
-                              if (url != null && url.isNotEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 4),
-                                  child: Text('اضغط للفتح', style: TextStyle(color: C.cyan, fontSize: 12)),
-                                ),
-                            ]),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color: const Color(0xFF241552),
+                            border: Border.all(color: st.colors.first.withValues(alpha: 0.6)),
                           ),
-                        ]),
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(colors: st.colors),
+                              ),
+                              child: Icon(st.icon, color: Colors.white),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(st.label, style: TextStyle(fontSize: 11, color: st.colors.first, fontWeight: FontWeight.w800)),
+                                Text(r['title'] as String, style: const TextStyle(fontWeight: FontWeight.w900)),
+                                if (((r['body'] ?? '') as String).isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(r['body'] as String, style: const TextStyle(color: Colors.white70)),
+                                  ),
+                                if (url != null && url.isNotEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: Text('اضغط للفتح', style: TextStyle(color: C.cyan, fontSize: 12)),
+                                  ),
+                              ]),
+                            ),
+                          ]),
+                        ),
                       );
                     },
                   ),
