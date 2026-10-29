@@ -1,3 +1,4 @@
+import '../play_gate.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -242,7 +243,9 @@ class _QueueScreenState extends State<_QueueScreen> {
       if (!mounted || _done) return;
       _done = true;
       _timer?.cancel();
-      toast(context, e.toString().contains('not enough images')
+      toast(context, e.toString().contains('no rounds')
+          ? 'انتهت جولاتك المجانية اليوم'
+          : e.toString().contains('not enough images')
           ? 'لا توجد صور كافية في هذه الفئة بعد'
           : friendlyError(e));
       Navigator.pop(context);
@@ -319,6 +322,7 @@ class _FriendPickScreenState extends State<_FriendPickScreen> {
   }
 
   Future<void> _invite(Map<String, dynamic> u) async {
+    if (!await ensureCanPlay(context)) return;
     try {
       final id = await supa.rpc('send_invite', params: {'p_to': u['id'], 'p_cat': widget.catId});
       if (!mounted) return;

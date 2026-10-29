@@ -790,7 +790,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (((p['gender'] ?? '') as String).isNotEmpty) ('الجنس', p['gender'] as String),
       if (((p['language'] ?? '') as String).isNotEmpty) ('اللغة', p['language'] as String),
       if (((p['marital'] ?? '') as String).isNotEmpty) ('الحالة', p['marital'] as String),
-      if (_created != null) ('العمر في نتونس', _since(_created!)),
+      if (_created != null) ('العمر في نستأنس', _since(_created!)),
       if (((p['bio'] ?? '') as String).isNotEmpty) ('السيرة الذاتية', p['bio'] as String),
       if (((p['interests'] ?? '') as String).isNotEmpty) ('الاهتمامات', p['interests'] as String),
     ];
@@ -880,7 +880,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
   Future<void> _share(Map<String, dynamic> p) => Share.share(
-      'تعال تابعني على «نتونس» 🎙️\n${p['name']} — @${p['username']} (ID ${p['num']})');
+      'تعال تابعني على «نستأنس» 🎮\n${p['name']} — @${p['username']} (ID ${p['num']})');
 
   void _menu() {
     final p = _p!;

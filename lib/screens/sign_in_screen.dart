@@ -77,7 +77,7 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
             const SizedBox(height: 22),
-            const Text('نتونس',
+            const Text('نستأنس',
                 style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
             const Text('تحدّث، تعرّف، واستمتع بغرف صوتية مباشرة',

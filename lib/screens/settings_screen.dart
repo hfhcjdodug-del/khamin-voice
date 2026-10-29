@@ -90,7 +90,7 @@ class SettingsScreen extends StatelessWidget {
         _row(context, Icons.info_rounded, 'حول التطبيق',
             onTap: () => showAboutDialog(
                   context: context,
-                  applicationName: 'نتونس',
+                  applicationName: 'نستأنس',
                   applicationVersion: '1.0.0',
                   children: const [
                     Text(

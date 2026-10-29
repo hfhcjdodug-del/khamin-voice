@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../play_gate.dart';
 import '../push.dart';
+import 'tutorial_screen.dart';
 import '../theme.dart';
 import 'guess_match_screen.dart';
 import 'friends_tab.dart';
@@ -30,6 +32,9 @@ class _ShellScreenState extends State<ShellScreen> {
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _checkInvites());
     _checkInvites();
     NoticeListener.start();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybeShowTutorial(context);
+    });
   }
 
   @override
@@ -57,6 +62,7 @@ class _ShellScreenState extends State<ShellScreen> {
           text: 'يتحداك في «خمّن الشخصية» · ${g['category_name']}',
           icon: Icons.sports_esports_rounded,
           onAccept: () async {
+            if (!await ensureCanPlay(context)) return;
             final mid = await supa.rpc('accept_invite', params: {'p_id': g!['id']});
             if (!mounted) return;
             Navigator.push(context,

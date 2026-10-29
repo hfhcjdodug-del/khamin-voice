@@ -7,7 +7,9 @@ import '../main.dart';
 import 'rewards_screen.dart';
 import '../shop_screen.dart';
 import '../theme.dart';
+import '../play_gate.dart';
 import 'guess_lobby_screen.dart';
+import 'tutorial_screen.dart';
 import 'guess_match_screen.dart';
 
 class _GameDef {
@@ -130,6 +132,7 @@ class _GamesTabState extends State<GamesTab> {
   }
 
   Future<void> _accept(Map<String, dynamic> inv) async {
+    if (!await ensureCanPlay(context)) return;
     try {
       final mid = await supa.rpc('accept_invite', params: {'p_id': inv['id']});
       if (!mounted) return;
@@ -158,14 +161,27 @@ class _GamesTabState extends State<GamesTab> {
       toast(context, 'قريباً... ${g.title}');
       return;
     }
-    Navigator.push(
-        context, MaterialPageRoute(builder: (_) => GuessLobbyScreen(music: g.music)));
+    ensureCanPlay(context).then((ok) {
+      if (!ok || !mounted) return;
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => GuessLobbyScreen(music: g.music)));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الألعاب', style: TextStyle(fontWeight: FontWeight.w800))),
+      appBar: AppBar(
+        title: const Text('الألعاب', style: TextStyle(fontWeight: FontWeight.w800)),
+        actions: [
+          _RoundsChip(active: widget.active),
+          IconButton(
+            tooltip: 'طريقة اللعب',
+            icon: const Icon(Icons.help_outline_rounded),
+            onPressed: () => openTutorial(context),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
@@ -339,6 +355,54 @@ class _GameCard extends StatelessWidget {
               ),
             ),
         ]),
+      ),
+    );
+  }
+}
+
+
+/// عدّاد الجولات المجانية المتبقية اليوم.
+class _RoundsChip extends StatefulWidget {
+  final bool active;
+  const _RoundsChip({required this.active});
+
+  @override
+  State<_RoundsChip> createState() => _RoundsChipState();
+}
+
+class _RoundsChipState extends State<_RoundsChip> {
+  String? _text;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RoundsChip old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final s = await playStatus();
+      final unlimited = s['unlimited'] == true || s['pass_until'] != null;
+      final t = unlimited ? 'لعب مفتوح ∞' : 'الجولات: ${s['left']}/${s['free_total']}';
+      if (mounted) setState(() => _text = t);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_text == null) return const SizedBox.shrink();
+    return Center(
+      child: Container(
+        margin: const EdgeInsetsDirectional.only(end: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(14)),
+        child: Text(_text!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
       ),
     );
   }

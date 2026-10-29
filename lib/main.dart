@@ -103,7 +103,7 @@ class KhaminApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = ThemeData.dark(useMaterial3: true);
     return MaterialApp(
-      title: 'نتونس',
+      title: 'نستأنس',
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar'),

@@ -69,7 +69,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 8,
+      length: 10,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -85,6 +85,8 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'المدفوعات'),
               Tab(text: 'المهام'),
               Tab(text: 'الألقاب والمستويات'),
+              Tab(text: 'طريقة اللعب'),
+              Tab(text: 'الجولات والأسعار'),
             ],
           ),
         ),
@@ -97,6 +99,8 @@ class AdminScreen extends StatelessWidget {
           _PaymentsAdminTab(),
           _MissionsAdminTab(),
           _BadgesAdminTab(),
+          _TutorialAdminTab(),
+          _PlaySettingsTab(),
         ]),
       ),
     );
@@ -1487,6 +1491,262 @@ class _BadgesAdminTabState extends State<_BadgesAdminTab> {
           ],
         ),
       ],
+    ]);
+  }
+}
+
+
+// ===================== شرح طريقة اللعب =====================
+class _TutorialAdminTab extends StatefulWidget {
+  const _TutorialAdminTab();
+
+  @override
+  State<_TutorialAdminTab> createState() => _TutorialAdminTabState();
+}
+
+class _TutorialAdminTabState extends State<_TutorialAdminTab> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String? _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('tutorial_slides').select().order('sort');
+      if (mounted) setState(() => _items = List<Map<String, dynamic>>.from(r));
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _add() async {
+    try {
+      final next = _items.isEmpty ? 1 : ((_items.last['sort'] as num).toInt() + 1);
+      await supa.from('tutorial_slides').insert({'sort': next, 'title': 'عنوان جديد', 'body': 'اكتب الشرح هنا'});
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _update(Map<String, dynamic> s, Map<String, dynamic> v) async {
+    try {
+      await supa.from('tutorial_slides').update(v).eq('id', s['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _image(Map<String, dynamic> s) async {
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1400, imageQuality: 88);
+    if (f == null) return;
+    setState(() => _busy = s['id'] as String);
+    try {
+      final url = await _uploadImage(f, 'tutorial');
+      await _update(s, {'image_url': url});
+    } catch (e) {
+      if (mounted) toast(context, 'فشل الرفع: ${friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  Future<void> _edit(Map<String, dynamic> s) async {
+    final t = TextEditingController(text: (s['title'] ?? '') as String);
+    final b = TextEditingController(text: (s['body'] ?? '') as String);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('تعديل الشريحة'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: t, decoration: const InputDecoration(labelText: 'العنوان')),
+            const SizedBox(height: 10),
+            TextField(controller: b, maxLines: 5, decoration: const InputDecoration(labelText: 'الشرح')),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (ok == true) await _update(s, {'title': t.text.trim(), 'body': b.text.trim()});
+  }
+
+  Future<void> _move(int i, int dir) async {
+    final j = i + dir;
+    if (j < 0 || j >= _items.length) return;
+    final a = _items[i], b = _items[j];
+    try {
+      await supa.from('tutorial_slides').update({'sort': b['sort']}).eq('id', a['id']);
+      await supa.from('tutorial_slides').update({'sort': a['sort']}).eq('id', b['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('حذف الشريحة؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await supa.from('tutorial_slides').delete().eq('id', s['id']);
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Text('تظهر هذه الشرائح للمستخدم عند أول دخول، وبزر «؟» في صفحة الألعاب.',
+          style: TextStyle(color: Colors.white60)),
+      const SizedBox(height: 10),
+      GradButton(label: 'إضافة شريحة', icon: Icons.add_rounded, onPressed: _add),
+      const SizedBox(height: 12),
+      for (var i = 0; i < _items.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: GlassCard(
+            child: Row(children: [
+              GestureDetector(
+                onTap: _busy == null ? () => _image(_items[i]) : null,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    color: Colors.white10,
+                    child: _busy == _items[i]['id']
+                        ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                        : ((_items[i]['image_url'] ?? '') as String).isEmpty
+                            ? const Icon(Icons.add_photo_alternate_outlined)
+                            : Image.network(_items[i]['image_url'] as String, fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text((_items[i]['title'] ?? '') as String,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text((_items[i]['body'] ?? '') as String,
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                ]),
+              ),
+              Column(children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.keyboard_arrow_up_rounded), onPressed: () => _move(i, -1)),
+                  IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.keyboard_arrow_down_rounded), onPressed: () => _move(i, 1)),
+                ]),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.edit_rounded, size: 20), onPressed: () => _edit(_items[i])),
+                  IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent), onPressed: () => _delete(_items[i])),
+                ]),
+              ]),
+            ]),
+          ),
+        ),
+    ]);
+  }
+}
+
+// ===================== الجولات والأسعار =====================
+class _PlaySettingsTab extends StatefulWidget {
+  const _PlaySettingsTab();
+
+  @override
+  State<_PlaySettingsTab> createState() => _PlaySettingsTabState();
+}
+
+class _PlaySettingsTabState extends State<_PlaySettingsTab> {
+  static const _fields = <(String, String, String)>[
+    ('free_rounds_daily', 'الجولات المجانية يومياً', '5'),
+    ('ad_round_max', 'أقصى جولات إضافية بالإعلانات يومياً', '10'),
+    ('ad_gems_amount', 'الماسات مقابل إعلان واحد', '10'),
+    ('ad_gems_max', 'أقصى إعلانات الماسات يومياً', '20'),
+    ('pass_day_price', 'سعر اللعب المفتوح ليوم (ماسات)', '100'),
+    ('pass_week_price', 'سعر الأسبوع (ماسات)', '500'),
+    ('pass_month_price', 'سعر الشهر (ماسات)', '1500'),
+  ];
+  final _c = {for (final f in _fields) f.$1: TextEditingController()};
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('app_settings').select('key,value').inFilter('key', [for (final f in _fields) f.$1]);
+      final m = {for (final x in r) x['key'] as String: x['value'] as String};
+      for (final f in _fields) {
+        _c[f.$1]!.text = m[f.$1] ?? f.$3;
+      }
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      for (final f in _fields) {
+        final v = int.tryParse(_c[f.$1]!.text.trim());
+        if (v == null || v < 0) {
+          toast(context, 'قيمة غير صحيحة: ${f.$2}');
+          return;
+        }
+        await _setSetting(f.$1, '$v');
+      }
+      if (mounted) toast(context, 'تم الحفظ');
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      for (final f in _fields)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TextField(
+            controller: _c[f.$1],
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: f.$2),
+          ),
+        ),
+      GradButton(label: _saving ? 'جارٍ الحفظ…' : 'حفظ', onPressed: _saving ? null : _save),
     ]);
   }
 }
