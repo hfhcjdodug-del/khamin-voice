@@ -22,6 +22,7 @@ class GiftAnim extends StatefulWidget {
 
 class _GiftAnimState extends State<GiftAnim> {
   bool _failed = false;
+  String _err = '';
 
   @override
   void initState() {
@@ -42,9 +43,12 @@ class _GiftAnimState extends State<GiftAnim> {
         src: widget.svga!,
         loop: widget.loop,
         onDone: widget.onDone,
-        onFail: () {
+        onFail: (e) {
           if (!mounted) return;
-          setState(() => _failed = true);
+          setState(() {
+            _failed = true;
+            _err = '$e';
+          });
           _fallbackDone();
         },
       );
@@ -56,7 +60,16 @@ class _GiftAnimState extends State<GiftAnim> {
     return _emoji();
   }
 
-  Widget _emoji() => Center(child: Text(widget.emoji, style: const TextStyle(fontSize: 72)));
+  Widget _emoji() => Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(widget.emoji, style: const TextStyle(fontSize: 72)),
+          if (widget.loop && _err.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text('تعذّر التشغيل: $_err', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+            ),
+        ]),
+      );
 }
 
 /// طبقة تشغيل الهدايا فوق الشاشة: تُضاف في Stack وتستقبل الهدايا بالدور.

@@ -255,7 +255,7 @@ class SvgaView extends StatefulWidget {
   final String src;
   final bool loop;
   final VoidCallback? onDone;
-  final VoidCallback? onFail;
+  final void Function(Object error)? onFail;
   const SvgaView({super.key, required this.src, this.loop = false, this.onDone, this.onFail});
 
   @override
@@ -283,8 +283,9 @@ class _SvgaViewState extends State<SvgaView> with SingleTickerProviderStateMixin
       } else {
         _c.forward().whenComplete(() => widget.onDone?.call());
       }
-    } catch (_) {
-      widget.onFail?.call();
+    } catch (e, st) {
+      debugPrint('SVGA error: $e\n$st');
+      widget.onFail?.call(e);
     }
   }
 
