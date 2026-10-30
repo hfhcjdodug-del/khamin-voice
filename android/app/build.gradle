@@ -38,6 +38,10 @@ android {
             storePassword = "guesspass2026"
             keyAlias = "guess"
             keyPassword = "guesspass2026"
+            // توقيع بكل الأنظمة لأقصى توافق مع برامج التثبيت في الهواتف المختلفة
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 
@@ -59,4 +63,11 @@ dependencies {
 // خدمات Firebase (الإشعارات): تُفعَّل فقط إذا وُجد ملف google-services.json داخل android/app
 if (file("google-services.json").exists()) {
     apply plugin: "com.google.gms.google-services"
+}
+
+// نفس رقم الإصدار لنسختي 32 و64 بت، حتى لا يُعدّ الانتقال بينهما «تخفيضاً» فيرفضه الأندرويد.
+android.applicationVariants.all { variant ->
+    variant.outputs.each { output ->
+        output.versionCodeOverride = variant.versionCode
+    }
 }
