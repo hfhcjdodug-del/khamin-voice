@@ -8,6 +8,7 @@ import '../ads.dart';
 import '../main.dart';
 import '../audio.dart';
 import '../theme.dart';
+import '../gifts.dart';
 
 class GuessMatchScreen extends StatefulWidget {
   final String matchId;
@@ -29,6 +30,8 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
   bool _connected = false;
   bool _ended = false;
   bool _following = false;
+  final _giftKey = GlobalKey<GiftOverlayState>();
+  int _lastGift = -1; // -1 = لم نحدد خط الأساس بعد
   String _voiceNote = 'جاري ربط الصوت...';
 
   @override
@@ -74,10 +77,33 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
         showRoundEndAd();
         return;
       }
+      _pollGifts();
       setState(() {
         _v = Map<String, dynamic>.from(r.first as Map);
         _msgs = List<Map<String, dynamic>>.from(m);
       });
+    } catch (_) {}
+  }
+
+  Future<void> _pollGifts() async {
+    try {
+      final g = await supa
+          .from('match_gifts')
+          .select()
+          .eq('match_id', widget.matchId)
+          .gt('id', _lastGift < 0 ? 0 : _lastGift)
+          .order('id');
+      final list = List<Map<String, dynamic>>.from(g);
+      for (final x in list) {
+        final id = (x['id'] as num).toInt();
+        if (id <= _lastGift) continue;
+        _lastGift = id;
+        // أول جلب: نتجاهل القديم، نشغّل فقط الهدايا خلال آخر 20 ثانية
+        final t = DateTime.tryParse('${x['created_at']}');
+        final fresh = t == null || DateTime.now().toUtc().difference(t.toUtc()).inSeconds < 20;
+        if (fresh) _giftKey.currentState?.play(x);
+      }
+      if (_lastGift < 0) _lastGift = 0;
     } catch (_) {}
   }
 
@@ -268,7 +294,9 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: _leave),
         ),
-        body: v == null
+        body: Stack(children: [
+          Positioned.fill(
+            child: v == null
             ? const Center(child: CircularProgressIndicator(color: C.pink))
             : Column(children: [
                 Padding(
@@ -339,6 +367,12 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
                     else
                       const Expanded(child: SizedBox()),
                     const SizedBox(width: 10),
+                    IconButton.filled(
+                      onPressed: () => showGiftSheet(context, widget.matchId),
+                      style: IconButton.styleFrom(backgroundColor: C.pink, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.card_giftcard_rounded),
+                    ),
+                    const SizedBox(width: 8),
                     _round(_micOn ? Icons.mic_rounded : Icons.mic_off_rounded, _micOn,
                         _connected ? () => _setMic(!_micOn) : null),
                     const SizedBox(width: 8),
@@ -396,6 +430,9 @@ class _GuessMatchScreenState extends State<GuessMatchScreen> {
                   ),
                 ),
               ]),
+          ),
+          Positioned.fill(child: GiftOverlay(key: _giftKey)),
+        ]),
       ),
     );
   }

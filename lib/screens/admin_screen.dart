@@ -10,6 +10,7 @@ import '../config.dart';
 import '../level.dart';
 import '../main.dart';
 import '../media.dart';
+import '../gifts.dart';
 import '../theme.dart';
 
 Future<String> _uploadImage(XFile f, String folder) async {
@@ -69,7 +70,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 11,
+      length: 12,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة المدير', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -88,6 +89,7 @@ class AdminScreen extends StatelessWidget {
               Tab(text: 'طريقة اللعب'),
               Tab(text: 'الجولات والأسعار'),
               Tab(text: 'شاشة الدخول'),
+              Tab(text: 'الهدايا'),
             ],
           ),
         ),
@@ -103,6 +105,7 @@ class AdminScreen extends StatelessWidget {
           _TutorialAdminTab(),
           _PlaySettingsTab(),
           _LoginMediaTab(),
+          _GiftsAdminTab(),
         ]),
       ),
     );
@@ -1883,5 +1886,169 @@ class _LoginMediaTabState extends State<_LoginMediaTab> {
         GradButton(label: 'حذف الفيديو', icon: Icons.delete_outline_rounded, outlined: true, onPressed: _busy ? null : _remove),
       ],
     ]);
+  }
+}
+
+// ===================== الهدايا =====================
+class _GiftsAdminTab extends StatefulWidget {
+  const _GiftsAdminTab();
+
+  @override
+  State<_GiftsAdminTab> createState() => _GiftsAdminTabState();
+}
+
+class _GiftsAdminTabState extends State<_GiftsAdminTab> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await supa.from('gifts').select().order('sort').order('price');
+      if (mounted) setState(() => _items = List<Map<String, dynamic>>.from(r));
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _do(Future<void> Function() f) async {
+    setState(() => _busy = true);
+    try {
+      await f();
+      await _load();
+    } catch (e) {
+      if (mounted) toast(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<String?> _pickSvga() async {
+    final r = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+    if (r == null || r.files.isEmpty) return null;
+    final f = r.files.first;
+    if (!f.name.toLowerCase().endsWith('.svga')) throw 'اختر ملف بصيغة .svga';
+    final bytes = f.bytes;
+    if (bytes == null) throw 'تعذّر قراءة الملف';
+    if (bytes.length > 3 * 1024 * 1024) throw 'الملف أكبر من 3 ميغا';
+    return uploadMedia(
+        bucket: 'game-media', folder: 'gifts', bytes: bytes, ext: 'svga', contentType: 'application/octet-stream');
+  }
+
+  Future<void> _add() => _do(() async {
+        final name = await _askText(context, 'اسم الهدية', '');
+        if (name == null) return;
+        if (!mounted) return;
+        final price = int.tryParse(await _askText(context, 'السعر بالماسات (رقم)', '50', max: 6) ?? '');
+        if (price == null || price < 1) return;
+        final svga = await _pickSvga();
+        await supa.from('gifts').insert({
+          'name': name,
+          'price': price,
+          'svga_url': svga,
+          'sort': _items.isEmpty ? 1 : ((_items.last['sort'] as num).toInt() + 1),
+        });
+      });
+
+  Future<void> _upd(Map<String, dynamic> g, Map<String, dynamic> v) =>
+      _do(() async => supa.from('gifts').update(v).eq('id', g['id']));
+
+  Future<void> _delete(Map<String, dynamic> g) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('حذف «${g['name']}»؟'),
+        content: const Text('تختفي الهدية من المنافسة والمتجر. الهدايا المرسلة سابقاً تبقى أرصدتها كما هي.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (ok == true) await _do(() async => supa.from('gifts').delete().eq('id', g['id']));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: C.pink));
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _busy ? null : _add,
+        icon: const Icon(Icons.add),
+        label: const Text('هدية جديدة'),
+      ),
+      body: ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 90), children: [
+        const Text(
+            'هذه هدايا المنافسة (تظهر بزر 🎁). ارفع ملف SVGA جديد أو احذف أي هدية لا تناسبك. الياقوت: كل 20 ماسة مستلمة = ياقوتة.',
+            style: TextStyle(color: Colors.white60, fontSize: 12)),
+        const SizedBox(height: 8),
+        for (final g in _items)
+          Card(
+            color: C.glass,
+            child: ListTile(
+              leading: Text((g['emoji'] as String?) ?? '🎁', style: const TextStyle(fontSize: 28)),
+              title: Text('${g['name']}  ·  ${g['price']} 💎'),
+              subtitle: Text(
+                  '${(g['svga_url'] ?? '').toString().isEmpty ? 'بلا حركة SVGA' : 'SVGA ✓'}${g['active'] == true ? '' : '  ·  مخفية'}',
+                  style: const TextStyle(fontSize: 11)),
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (d) => Dialog(
+                  child: SizedBox(
+                    width: 300,
+                    height: 300,
+                    child: GiftAnim(
+                        svga: g['svga_url'] as String?,
+                        image: g['image_url'] as String?,
+                        emoji: (g['emoji'] as String?) ?? '🎁',
+                        loop: true),
+                  ),
+                ),
+              ),
+              trailing: PopupMenuButton<String>(
+                onSelected: (a) async {
+                  if (a == 'name') {
+                    final t = await _askText(context, 'اسم الهدية', g['name'] as String);
+                    if (t != null) await _upd(g, {'name': t});
+                  } else if (a == 'price') {
+                    final t = await _askText(context, 'السعر (ماسات)', '${g['price']}', max: 6);
+                    final p = int.tryParse(t ?? '');
+                    if (p != null && p > 0) await _upd(g, {'price': p});
+                  } else if (a == 'emoji') {
+                    final t = await _askText(context, 'إيموجي بديل', (g['emoji'] as String?) ?? '🎁', max: 4);
+                    if (t != null) await _upd(g, {'emoji': t});
+                  } else if (a == 'svga') {
+                    await _do(() async {
+                      final u = await _pickSvga();
+                      if (u != null) await supa.from('gifts').update({'svga_url': u}).eq('id', g['id']);
+                    });
+                  } else if (a == 'active') {
+                    await _upd(g, {'active': g['active'] != true});
+                  } else if (a == 'del') {
+                    await _delete(g);
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'name', child: Text('تعديل الاسم')),
+                  const PopupMenuItem(value: 'price', child: Text('تعديل السعر')),
+                  const PopupMenuItem(value: 'emoji', child: Text('تعديل الإيموجي')),
+                  const PopupMenuItem(value: 'svga', child: Text('رفع ملف SVGA')),
+                  PopupMenuItem(value: 'active', child: Text(g['active'] == true ? 'إخفاء' : 'إظهار')),
+                  const PopupMenuItem(value: 'del', child: Text('حذف', style: TextStyle(color: Colors.redAccent))),
+                ],
+              ),
+            ),
+          ),
+      ]),
+    );
   }
 }

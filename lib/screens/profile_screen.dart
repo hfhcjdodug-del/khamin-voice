@@ -41,6 +41,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _viewerAdmin = false;
   ({int gems, bool adsFree, int rubyPts})? _wallet;
   bool _converting = false;
+  List<Map<String, dynamic>> _gifts = [];
+
+  Future<void> _loadGifts() async {
+    try {
+      final r = await supa.rpc('user_gifts', params: {'p_id': widget.userId}) as List;
+      if (mounted) setState(() => _gifts = List<Map<String, dynamic>>.from(r));
+    } catch (_) {}
+  }
+
+  Widget _giftsCard() {
+    if (_gifts.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: C.glass, borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('الهدايا المستلمة', style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 10, runSpacing: 8, children: [
+          for (final g in _gifts)
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text((g['emoji'] as String?) ?? '🎁', style: const TextStyle(fontSize: 26)),
+              Text('${g['name']} ×${g['qty']}', style: const TextStyle(fontSize: 11)),
+            ]),
+        ]),
+      ]),
+    );
+  }
   int _tab = 1; // 0 المنشورات، 1 الملف الشخصي، 2 الشرف، 3 العلاقة
   Map<String, dynamic> _extra = {}; // photos / tags / birthday (من v12)
   DateTime? _created;
@@ -163,6 +191,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _load();
     _loadExtra();
     _loadWallet();
+    _loadGifts();
     if (!_isMe) {
       Future(() async {
         try {
@@ -829,6 +858,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (_isMe) ...[
         const SizedBox(height: 18),
         _walletCard(),
+        _giftsCard(),
         const SizedBox(height: 10),
         _tile(Icons.edit_rounded, const [C.violet, Color(0xFF6D4AFF)], 'تعديل الملف الشخصي',
             'الصور والمعلومات والعلامات', _edit),
