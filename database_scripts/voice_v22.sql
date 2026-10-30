@@ -45,13 +45,11 @@ GRANT EXECUTE ON FUNCTION public.send_match_gift(uuid, uuid) TO authenticated;
 -- هدايا افتراضية (ملفاتها داخل التطبيق) — احذف أي هدية لا تناسبك من لوحة التحكم > الهدايا
 INSERT INTO public.gifts(name, price, emoji, svga_url, sort)
 SELECT v.n, v.p, v.e, v.u, v.s FROM (VALUES
-  ('قلب', 20, '💖', 'asset:TwitterHeart.svga', 1),
-  ('نبض', 50, '💓', 'asset:heartbeat.svga', 2),
-  ('وردة', 100, '🌹', 'asset:rose.svga', 3),
-  ('يقطينة', 150, '🎃', 'asset:halloween.svga', 4),
-  ('ملاك', 300, '😇', 'asset:angel.svga', 5),
-  ('صاروخ', 500, '🚀', 'asset:Rocket.svga', 6),
-  ('سيارة', 800, '🏎️', 'asset:posche.svga', 7),
-  ('ملك', 1500, '👑', 'asset:kingset.svga', 8)
+  ('نبض', 50, '💓', 'asset:heartbeat.svga', 1),
+  ('وردة', 100, '🌹', 'asset:rose.svga', 2),
+  ('يقطينة', 150, '🎃', 'asset:halloween.svga', 3),
+  ('ملاك', 300, '😇', 'asset:angel.svga', 4),
+  ('سيارة', 500, '🏎️', 'asset:posche.svga', 5),
+  ('ملك', 1000, '👑', 'asset:kingset.svga', 6)
 ) AS v(n, p, e, u, s)
 WHERE NOT EXISTS (SELECT 1 FROM public.gifts WHERE svga_url LIKE 'asset:%');

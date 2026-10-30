@@ -1,19 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 
 import 'main.dart';
+import 'svga.dart';
 import 'theme.dart';
 import 'widgets/gem_icon.dart';
-
-/// ينزّل ملف SVGA من رابط، أو من داخل التطبيق إذا كان بصيغة asset:name.svga
-Future<MovieEntity> _loadSvga(String src) {
-  if (src.startsWith('asset:')) {
-    return SVGAParser.shared.decodeFromAssets('assets/gifts/svga/${src.substring(6)}');
-  }
-  return SVGAParser.shared.decodeFromURL(src);
-}
 
 /// يعرض حركة الهدية (SVGA) وعند الفشل صورة/إيموجي بسيط.
 class GiftAnim extends StatefulWidget {
@@ -28,58 +20,40 @@ class GiftAnim extends StatefulWidget {
   State<GiftAnim> createState() => _GiftAnimState();
 }
 
-class _GiftAnimState extends State<GiftAnim> with SingleTickerProviderStateMixin {
-  late final SVGAAnimationController _c = SVGAAnimationController(vsync: this);
+class _GiftAnimState extends State<GiftAnim> {
   bool _failed = false;
-  bool _ready = false;
 
   @override
   void initState() {
     super.initState();
     final s = widget.svga;
-    if (s == null || s.isEmpty) {
-      _failed = true;
-      if (!widget.loop) Future.delayed(const Duration(seconds: 2), () => widget.onDone?.call());
-      return;
-    }
-    _load(s);
+    if (s == null || s.isEmpty) _failed = true;
+    if (_failed) _fallbackDone();
   }
 
-  Future<void> _load(String s) async {
-    try {
-      final v = await _loadSvga(s);
-      if (!mounted) return;
-      _c.videoItem = v;
-      setState(() => _ready = true);
-      if (widget.loop) {
-        _c.repeat();
-      } else {
-        _c.forward().whenComplete(() => widget.onDone?.call());
-      }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _failed = true);
-      if (!widget.loop) Future.delayed(const Duration(seconds: 2), () => widget.onDone?.call());
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
+  void _fallbackDone() {
+    if (!widget.loop) Future.delayed(const Duration(seconds: 2), () => widget.onDone?.call());
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_failed) {
-      final img = widget.image;
-      if (img != null && img.isNotEmpty && img.startsWith('http')) {
-        return Image.network(img, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _emoji());
-      }
-      return _emoji();
+    if (!_failed) {
+      return SvgaView(
+        src: widget.svga!,
+        loop: widget.loop,
+        onDone: widget.onDone,
+        onFail: () {
+          if (!mounted) return;
+          setState(() => _failed = true);
+          _fallbackDone();
+        },
+      );
     }
-    if (!_ready) return const SizedBox();
-    return SVGAImage(_c, fit: BoxFit.contain);
+    final img = widget.image;
+    if (img != null && img.startsWith('http')) {
+      return Image.network(img, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _emoji());
+    }
+    return _emoji();
   }
 
   Widget _emoji() => Center(child: Text(widget.emoji, style: const TextStyle(fontSize: 72)));
