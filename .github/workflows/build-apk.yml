@@ -31,7 +31,12 @@ jobs:
         run: flutter --version
 
       - name: Get packages
-        run: flutter pub get
+        shell: bash
+        run: |
+          if ! flutter pub get > /tmp/pubget.txt 2>&1; then
+            echo "::error title=pubget::$(tail -c 900 /tmp/pubget.txt | tr '\n' ' ')"
+            exit 1
+          fi
 
       - name: Analyze (does not block the build)
         shell: bash
