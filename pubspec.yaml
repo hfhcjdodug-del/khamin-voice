@@ -27,6 +27,7 @@ dependencies:
   svgaplayer_flutter: ^2.2.0
 
 dependency_overrides:
+  http: ^1.2.2
   shared_preferences: 2.3.5
   shared_preferences_android: 2.3.4
 
